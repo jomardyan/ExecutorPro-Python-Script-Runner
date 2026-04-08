@@ -1,0 +1,2694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Script Runner Control Plane</title>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --success-bg: #dcfce7;
+            --success-text: #166534;
+            --warning-bg: #fef3c7;
+            --warning-text: #92400e;
+            --danger-bg: #fee2e2;
+            --danger-text: #991b1b;
+            --info-bg: #e0f2fe;
+            --info-text: #075985;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --radius: 0.75rem;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #0f172a;
+                --card-bg: #1e293b;
+                --text-main: #f1f5f9;
+                --text-muted: #94a3b8;
+                --border-color: #334155;
+                --success-bg: #052e16;
+                --success-text: #4ade80;
+                --warning-bg: #451a03;
+                --warning-text: #fbbf24;
+                --danger-bg: #450a0a;
+                --danger-text: #f87171;
+                --info-bg: #082f49;
+                --info-text: #38bdf8;
+            }
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .brand h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), #818cf8);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .brand p {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            border: 1px solid var(--border-color);
+        }
+
+        h2 {
+            margin-top: 0;
+            font-size: 1.25rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        label {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        input, select {
+            padding: 0.625rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border-color);
+            background: var(--bg-color);
+            color: var(--text-main);
+            font-size: 0.95rem;
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.625rem 1.25rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--card-bg);
+            border-color: var(--text-muted);
+        }
+
+        .btn-sm {
+            padding: 0.375rem 0.75rem;
+            font-size: 0.875rem;
+        }
+
+        .btn-icon {
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+            color: var(--text-main);
+            transition: background 0.15s, border-color 0.15s;
+            vertical-align: middle;
+        }
+        .btn-icon:hover {
+            background: var(--bg-color);
+            border-color: var(--primary);
+        }
+
+        .controls {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background: var(--bg-color);
+            border-radius: 0.5rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+
+        th {
+            text-align: left;
+            padding: 1rem;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-color);
+        }
+
+        td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.95rem;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: capitalize;
+        }
+
+        .status-queued { background: var(--warning-bg); color: var(--warning-text); }
+        .status-running { background: var(--info-bg); color: var(--info-text); }
+        .status-completed { background: var(--success-bg); color: var(--success-text); }
+        .status-failed { background: var(--danger-bg); color: var(--danger-text); }
+        .status-cancelled { background: var(--bg-color); color: var(--text-muted); border: 1px solid var(--border-color); }
+        .status-killed { background: var(--danger-bg); color: var(--danger-text); }
+        .status-timeout { background: var(--warning-bg); color: var(--warning-text); }
+
+        /* Tabs */
+        .tab-nav {
+            display: flex;
+            gap: 0.25rem;
+            margin-bottom: 2rem;
+            border-bottom: 2px solid var(--border-color);
+        }
+        .tab-btn {
+            padding: 0.6rem 1.25rem;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: color 0.15s, border-color 0.15s;
+        }
+        .tab-btn.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* Tags */
+        .tag-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.15rem 0.6rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: var(--info-bg);
+            color: var(--info-text);
+        }
+        .lang-badge {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: var(--bg-color);
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
+        }
+        .lifecycle-badge {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .lifecycle-active { background: var(--success-bg); color: var(--success-text); }
+        .lifecycle-draft { background: var(--info-bg); color: var(--info-text); }
+        .lifecycle-deprecated { background: var(--warning-bg); color: var(--warning-text); }
+        .lifecycle-archived { background: var(--bg-color); color: var(--text-muted); border: 1px solid var(--border-color); }
+
+        .script-path {
+            max-width: 300px;
+            word-break: break-all;
+        }
+
+        .args-cell {
+            max-width: 200px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .code-pill {
+            font-family: monospace;
+            background: var(--bg-color);
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.85rem;
+            color: var(--primary);
+        }
+
+        .actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        /* Modal */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+        }
+
+        .modal {
+            background: var(--card-bg);
+            width: 90%;
+            max-width: 900px;
+            max-height: 85vh;
+            border-radius: var(--radius);
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .modal-header {
+            padding: 1.25rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-body {
+            padding: 0;
+            overflow: auto;
+            background: #0f172a;
+            flex: 1;
+        }
+
+        pre {
+            margin: 0;
+            padding: 1.5rem;
+            color: #e2e8f0;
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            padding: 1rem 1.5rem;
+            background: var(--card-bg);
+            border-left: 4px solid var(--primary);
+            box-shadow: var(--shadow);
+            border-radius: 0.5rem;
+            transform: translateY(150%);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 500;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+        }
+
+        .toast.success { border-color: var(--success); }
+        .toast.error { border-color: var(--danger); }
+
+        /* New Styles */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            padding: 1.25rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        .system-status {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            background: var(--bg-color);
+            padding: 0.5rem 1rem;
+            border-radius: 999px;
+            border: 1px solid var(--border-color);
+        }
+
+        .env-row {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .bulk-actions {
+            display: none;
+            align-items: center;
+            gap: 1rem;
+            background: var(--info-bg);
+            color: var(--info-text);
+            padding: 0.75rem 1.25rem;
+            border-radius: var(--radius);
+            margin-bottom: 1rem;
+            animation: slideDown 0.2s ease;
+        }
+        
+        .bulk-actions.visible {
+            display: flex;
+        }
+
+        @keyframes slideDown {
+            from { transform: translateY(-10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        @media (max-width: 768px) {
+            .container { padding: 1rem; }
+            .form-grid { grid-template-columns: 1fr; }
+            th, td { padding: 0.75rem 0.5rem; }
+            .hide-mobile { display: none; }
+        }
+
+        /* Add Root Modal specific styles */
+        #add-root-modal .modal-body {
+            background: var(--card-bg) !important;
+        }
+
+        #add-root-form .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        #add-root-form label {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        #add-root-form input[type="text"],
+        #add-root-form input[type="checkbox"] {
+            padding: 0.625rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border-color);
+            background: var(--bg-color);
+            color: var(--text-main);
+            font-size: 0.95rem;
+        }
+
+        #add-root-form input[type="text"]:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        #add-root-form input[type="checkbox"] {
+            width: auto;
+            margin-right: 0.5rem;
+        }
+
+        #add-root-form label:has(input[type="checkbox"]) {
+            flex-direction: row;
+            align-items: center;
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="brand">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                </svg>
+                <div>
+                    <h1>Script Runner</h1>
+                    <p>Control Plane & Monitoring</p>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div id="system-status" class="system-status hide-mobile">
+                    <span>CPU: <b id="cpu-load">0%</b></span>
+                    <span>Mem: <b id="mem-usage">0%</b></span>
+                </div>
+                <button id="refresh-btn" class="btn btn-secondary btn-sm">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    Refresh
+                </button>
+            </div>
+        </header>
+
+        <nav class="tab-nav">
+            <button class="tab-btn active" onclick="switchTab('runner', this)">🚀 Runner</button>
+            <button class="tab-btn" onclick="switchTab('library', this)">📚 Script Library</button>
+            <button class="tab-btn" onclick="switchTab('analytics', this)">📊 Analytics</button>
+            <button class="tab-btn" onclick="switchTab('cicd', this)">⚙️ CI/CD</button>
+            <button class="tab-btn" onclick="switchTab('scheduler', this)">🗓️ Scheduler</button>
+        </nav>
+
+        <!-- ===== RUNNER TAB ===== -->
+        <div id="tab-runner" class="tab-panel active">
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-total">0</div>
+                <div class="stat-label">Total Runs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-24h">0</div>
+                <div class="stat-label">Last 24 Hours</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-success">0%</div>
+                <div class="stat-label">Success Rate</div>
+            </div>
+        </div>
+
+        <section class="card">
+            <h2>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Launch Script
+                <div style="margin-left: auto; display: flex; gap: 0.5rem;">
+                    <select id="favorites-select" class="btn-sm" style="font-weight: normal; width: auto;">
+                        <option value="">Load Favorite...</option>
+                    </select>
+                    <button type="button" id="save-favorite-btn" class="btn btn-secondary btn-sm" title="Save current config">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                    </button>
+                </div>
+            </h2>
+            <form id="run-form">
+                <div class="form-grid">
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label>Script Source</label>
+                        <div style="display: flex; gap: 1rem; margin-bottom: 0.5rem;">
+                            <label style="flex-direction: row; align-items: center; gap: 0.5rem; font-weight: normal;">
+                                <input type="radio" name="script-source" value="path" checked onchange="toggleScriptSource()"> Server Path
+                            </label>
+                            <label style="flex-direction: row; align-items: center; gap: 0.5rem; font-weight: normal;">
+                                <input type="radio" name="script-source" value="upload" onchange="toggleScriptSource()"> Upload File
+                            </label>
+                        </div>
+
+                        <div id="path-input-container">
+                            <label for="script-path">Script Path</label>
+                            <input type="text" id="script-path" placeholder="./examples/sample.py" />
+                        </div>
+
+                        <div id="file-input-container" style="display: none;">
+                            <label for="script-file">Select Python File</label>
+                            <input type="file" id="script-file" accept=".py,.pyw" />
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="script-args">Arguments</label>
+                        <input type="text" id="script-args" placeholder="--flag, value" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="run-option">Preset Options</label>
+                        <select id="run-option">
+                            <option value="">None</option>
+                            <option value="--dry-run">Dry Run</option>
+                            <option value="--disable-history">Disable History</option>
+                            <option value="--show-history">Show History</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="timeout">Timeout (sec)</label>
+                        <input type="number" id="timeout" min="0" placeholder="Optional" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="log-level">Log Level</label>
+                        <select id="log-level">
+                            <option>INFO</option>
+                            <option>DEBUG</option>
+                            <option>WARNING</option>
+                            <option>ERROR</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="retry">Retry Policy</label>
+                        <select id="retry">
+                            <option value="false">Disabled</option>
+                            <option value="true">Enabled</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="working-dir">Working Directory</label>
+                        <input type="text" id="working-dir" placeholder="Defaults to script directory" />
+                    </div>
+
+                    <div class="form-group" style="justify-content: flex-end;">
+                        <label style="flex-direction: row; align-items: center; gap: 0.5rem; font-weight: normal; cursor: pointer;">
+                            <input type="checkbox" id="stream-output" />
+                            Stream output in real time
+                        </label>
+                        <label style="flex-direction: row; align-items: center; gap: 0.5rem; font-weight: normal; cursor: pointer; margin-top: 0.5rem;">
+                            <input type="checkbox" id="enable-visualizer" />
+                            Enable Execution Visualizer
+                        </label>
+                        <div id="visualizer-format-group" style="display: none; margin-top: 0.5rem; gap: 0.5rem; align-items: center;">
+                            <label style="font-weight: normal; font-size: 0.875rem;">Format:</label>
+                            <select id="visualizer-format" style="padding: 0.3rem 0.5rem; font-size: 0.875rem;">
+                                <option value="text">Text</option>
+                                <option value="json">JSON</option>
+                            </select>
+                        </div>
+                        <label style="flex-direction: row; align-items: center; gap: 0.5rem; font-weight: normal; cursor: pointer; margin-top: 0.5rem;">
+                            <input type="checkbox" id="dry-run" />
+                            Dry Run (validate without executing)
+                        </label>
+                        <label style="flex-direction: row; align-items: center; gap: 0.5rem; font-weight: normal; cursor: pointer; margin-top: 0.5rem;">
+                            <input type="checkbox" id="enable-code-analysis" />
+                            Code Analysis (v7)
+                        </label>
+                        <label style="flex-direction: row; align-items: center; gap: 0.5rem; font-weight: normal; cursor: pointer; margin-top: 0.5rem;">
+                            <input type="checkbox" id="enable-secret-scanning" />
+                            Secret Scanning (v7)
+                        </label>
+                        <label style="flex-direction: row; align-items: center; gap: 0.5rem; font-weight: normal; cursor: pointer; margin-top: 0.5rem;">
+                            <input type="checkbox" id="enable-dependency-scanning" />
+                            Dependency Scanning (v7)
+                        </label>
+                    </div>
+
+                    <!-- Advanced Options (collapsible) -->
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <details>
+                            <summary style="cursor: pointer; font-weight: 600; color: var(--primary); padding: 0.5rem 0; user-select: none;">⚙️ Advanced Options (Retry, Monitor, Performance Gates)</summary>
+                            <div style="border: 1px solid var(--border-color); border-radius: 0.5rem; padding: 1rem; margin-top: 0.75rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+
+                                <div class="form-group">
+                                    <label for="adv-retry-strategy">Retry Strategy</label>
+                                    <select id="adv-retry-strategy">
+                                        <option value="exponential">Exponential Backoff</option>
+                                        <option value="linear">Linear</option>
+                                        <option value="fibonacci">Fibonacci</option>
+                                        <option value="exponential_jitter">Exponential + Jitter</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="adv-retry-max-attempts">Max Retry Attempts</label>
+                                    <input type="number" id="adv-retry-max-attempts" value="3" min="1" max="20" />
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="adv-retry-initial-delay">Initial Retry Delay (s)</label>
+                                    <input type="number" id="adv-retry-initial-delay" value="1.0" min="0.1" step="0.1" />
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="adv-retry-max-delay">Max Retry Delay (s)</label>
+                                    <input type="number" id="adv-retry-max-delay" value="60" min="1" />
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="adv-monitor-interval">Monitor Interval (s)</label>
+                                    <input type="number" id="adv-monitor-interval" value="0.1" min="0.01" step="0.01" />
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="adv-load-baseline">Load Baseline (JSON path)</label>
+                                    <input type="text" id="adv-load-baseline" placeholder="./baseline.json" />
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="adv-save-baseline">Save Baseline To (JSON path)</label>
+                                    <input type="text" id="adv-save-baseline" placeholder="./baseline.json" />
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="adv-junit-output">JUnit Output Path</label>
+                                    <input type="text" id="adv-junit-output" placeholder="./results.xml" />
+                                </div>
+
+                                <!-- Performance Gates -->
+                                <div class="form-group" style="grid-column: 1 / -1;">
+                                    <label>Performance Gates</label>
+                                    <div id="perf-gates-list"></div>
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="addPerfGate()" style="margin-top: 0.5rem;">+ Add Gate</button>
+                                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">e.g. cpu_max &lt; 90%, execution_time_seconds &lt; 30</div>
+                                </div>
+
+                                <!-- Alerts -->
+                                <div class="form-group" style="grid-column: 1 / -1;">
+                                    <label>Alerts</label>
+                                    <div id="alerts-list"></div>
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="addAlert()" style="margin-top: 0.5rem;">+ Add Alert</button>
+                                </div>
+
+                                <div class="form-group" style="grid-column: 1 / -1;">
+                                    <label for="adv-slack-webhook">Slack Webhook URL (for alert notifications)</label>
+                                    <input type="url" id="adv-slack-webhook" placeholder="https://hooks.slack.com/services/..." />
+                                </div>
+                            </div>
+                        </details>
+                    </div>
+
+                    <div class="form-group" style="grid-column: 1 / -1;">
+                        <label>Environment Variables</label>
+                        <div id="env-vars-container">
+                            <!-- Env vars rows will go here -->
+                        </div>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="addEnvVar()">+ Add Variable</button>
+                    </div>
+                </div>
+                <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end;">
+                    <button type="submit" class="btn btn-primary">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        Start Execution
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <section class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h2 style="margin: 0;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    Recent Runs
+                </h2>
+            </div>
+            
+            <div id="bulk-actions" class="bulk-actions">
+                <span style="font-weight: 600;"><span id="selected-count">0</span> selected</span>
+                <div style="margin-left: auto; display: flex; gap: 0.5rem;">
+                    <button onclick="bulkDelete()" class="btn btn-sm" style="background: white; color: var(--danger-text); border: 1px solid var(--danger-text);">Delete Selected</button>
+                    <button onclick="clearSelection()" class="btn btn-sm btn-secondary">Cancel</button>
+                </div>
+            </div>
+
+            <div class="controls">
+                <div class="form-group" style="flex-direction: row; align-items: center;">
+                    <label for="status-filter">Status:</label>
+                    <select id="status-filter" style="padding: 0.4rem;">
+                        <option value="">All Statuses</option>
+                        <option value="queued">Queued</option>
+                        <option value="running">Running</option>
+                        <option value="completed">Completed</option>
+                        <option value="failed">Failed</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex-direction: row; align-items: center;">
+                    <label for="page-size">Limit:</label>
+                    <input type="number" id="page-size" value="50" min="1" max="200" style="width: 80px; padding: 0.4rem;" />
+                </div>
+            </div>
+
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:32px;padding:0.5rem"><input type="checkbox" id="select-all" onclick="toggleSelectAll()"></th>
+                            <th style="padding:0.5rem 0.75rem">Script</th>
+                            <th style="width:120px;padding:0.5rem 0.75rem">Started</th>
+                            <th style="width:68px;padding:0.5rem 0.75rem">Duration</th>
+                            <th style="width:124px;padding:0.5rem;text-align:right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="runs-table">
+                        <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Loading runs...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="pagination">
+                <button id="prev-page" class="btn btn-secondary btn-sm" disabled>Previous</button>
+                <span id="page-info" style="display: flex; align-items: center; font-size: 0.9rem; color: var(--text-muted);">Page 1</span>
+                <button id="next-page" class="btn btn-secondary btn-sm">Next</button>
+            </div>
+        </section>
+        </div><!-- /tab-runner -->
+
+        <!-- ===== LIBRARY TAB ===== -->
+        <div id="tab-library" class="tab-panel">
+
+            <!-- Library stats bar -->
+            <div class="stats-grid" style="margin-bottom: 1.5rem;">
+                <div class="stat-card">
+                    <div class="stat-value" id="lib-stat-scripts">0</div>
+                    <div class="stat-label">Indexed Scripts</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="lib-stat-roots">0</div>
+                    <div class="stat-label">Folder Roots</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="lib-stat-tags">0</div>
+                    <div class="stat-label">Tags</div>
+                </div>
+            </div>
+
+            <!-- Folder Roots -->
+            <section class="card">
+                <h2 style="margin-bottom: 1rem;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                    Folder Roots
+                    <button class="btn btn-secondary btn-sm" style="margin-left: auto;" onclick="showAddRootDialog()">+ Add Root</button>
+                </h2>
+                <div id="folder-roots-list">
+                    <p style="color: var(--text-muted); text-align: center; padding: 1rem;">Loading folder roots…</p>
+                </div>
+            </section>
+
+            <!-- Tags -->
+            <section class="card">
+                <h2 style="margin-bottom: 1rem;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+                    Tags
+                    <button class="btn btn-secondary btn-sm" style="margin-left: auto;" onclick="showAddTagDialog()">+ Add Tag</button>
+                </h2>
+                <div id="lib-tags-list" style="display: flex; flex-wrap: wrap; gap: 0.5rem; min-height: 2rem;">
+                    <span style="color: var(--text-muted);">Loading…</span>
+                </div>
+            </section>
+
+            <!-- Script Browser -->
+            <section class="card">
+                <h2 style="margin-bottom: 1rem;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    Script Browser
+                </h2>
+
+                <!-- Filters -->
+                <div class="controls" style="flex-wrap: wrap;">
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Search:</label>
+                        <input type="text" id="lib-search" placeholder="name or path…" style="padding: 0.4rem; min-width: 180px;" oninput="debouncedLibSearch()" />
+                    </div>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Language:</label>
+                        <select id="lib-lang-filter" style="padding: 0.4rem;" onchange="fetchLibScripts()">
+                            <option value="">All</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Status:</label>
+                        <select id="lib-status-filter" style="padding: 0.4rem;" onchange="fetchLibScripts()">
+                            <option value="">All</option>
+                            <option value="active">Active</option>
+                            <option value="draft">Draft</option>
+                            <option value="deprecated">Deprecated</option>
+                            <option value="archived">Archived</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Tag:</label>
+                        <select id="lib-tag-filter" style="padding: 0.4rem;" onchange="fetchLibScripts()">
+                            <option value="">All</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Root:</label>
+                        <select id="lib-root-filter" style="padding: 0.4rem;" onchange="fetchLibScripts()">
+                            <option value="">All</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" onclick="fetchLibDuplicates()">🔍 Find Duplicates</button>
+                </div>
+
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th class="hide-mobile">Path</th>
+                                <th>Language</th>
+                                <th>Status</th>
+                                <th class="hide-mobile">Tags</th>
+                                <th class="hide-mobile">Lines</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="lib-scripts-table">
+                            <tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Add a folder root and scan to index scripts.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pagination" style="margin-top: 1rem;">
+                    <button id="lib-prev-page" class="btn btn-secondary btn-sm" disabled onclick="libChangePage(-1)">Previous</button>
+                    <span id="lib-page-info" style="display: flex; align-items: center; font-size: 0.9rem; color: var(--text-muted);">Page 1</span>
+                    <button id="lib-next-page" class="btn btn-secondary btn-sm" onclick="libChangePage(1)">Next</button>
+                </div>
+            </section>
+
+            <!-- Duplicates panel (hidden by default) -->
+            <section class="card" id="lib-duplicates-panel" style="display: none;">
+                <h2 style="margin-bottom: 1rem;">
+                    ⚠️ Duplicate Scripts
+                    <button class="btn btn-secondary btn-sm" style="margin-left: auto;" onclick="document.getElementById('lib-duplicates-panel').style.display='none'">Close</button>
+                </h2>
+                <div id="lib-duplicates-list"></div>
+            </section>
+        </div><!-- /tab-library -->
+
+        <!-- ===== ANALYTICS TAB ===== -->
+        <div id="tab-analytics" class="tab-panel">
+            <div class="stats-grid" style="margin-bottom: 1.5rem;">
+                <div class="stat-card">
+                    <div class="stat-value" id="analytics-stat-total">-</div>
+                    <div class="stat-label">Total Executions (History DB)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="analytics-stat-success-rate">-</div>
+                    <div class="stat-label">Success Rate</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="analytics-stat-avg-time">-</div>
+                    <div class="stat-label">Avg Execution Time</div>
+                </div>
+            </div>
+
+            <!-- History Query -->
+            <section class="card">
+                <h2 style="margin-bottom:1rem;">📜 Execution History</h2>
+                <div class="controls" style="flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Script Path:</label>
+                        <input type="text" id="analytics-script-path" placeholder="all scripts" style="padding: 0.4rem; min-width: 200px;" />
+                    </div>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Days:</label>
+                        <input type="number" id="analytics-days" value="30" min="1" max="365" style="width: 80px; padding: 0.4rem;" />
+                    </div>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Limit:</label>
+                        <input type="number" id="analytics-limit" value="50" min="1" max="1000" style="width: 80px; padding: 0.4rem;" />
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="fetchAnalyticsHistory()">🔍 Query</button>
+                    <button class="btn btn-secondary btn-sm" onclick="exportAnalytics('json')">⬇️ Export JSON</button>
+                    <button class="btn btn-secondary btn-sm" onclick="exportAnalytics('csv')">⬇️ Export CSV</button>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Script</th>
+                                <th>Started</th>
+                                <th>Duration (s)</th>
+                                <th>Exit Code</th>
+                                <th>Success</th>
+                                <th>CPU Max</th>
+                                <th>Mem Max (MB)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="analytics-history-table">
+                            <tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Click "Query" to load history.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Trend Analysis -->
+            <section class="card">
+                <h2 style="margin-bottom:1rem;">📈 Trend Analysis</h2>
+                <div class="controls" style="flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Metric:</label>
+                        <select id="trend-metric" style="padding: 0.4rem;">
+                            <option value="execution_time_seconds">Execution Time (s)</option>
+                            <option value="cpu_max">CPU Max (%)</option>
+                            <option value="cpu_avg">CPU Avg (%)</option>
+                            <option value="memory_max_mb">Memory Max (MB)</option>
+                            <option value="memory_avg_mb">Memory Avg (MB)</option>
+                            <option value="stdout_lines">Stdout Lines</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Script:</label>
+                        <input type="text" id="trend-script-path" placeholder="all" style="padding: 0.4rem; min-width: 180px;" />
+                    </div>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Days:</label>
+                        <input type="number" id="trend-days" value="30" min="1" max="365" style="width: 80px; padding: 0.4rem;" />
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="fetchTrend()">Analyze</button>
+                </div>
+                <div id="trend-result" style="color: var(--text-muted); font-size: 0.9rem;">Run an analysis to see results.</div>
+            </section>
+
+            <!-- Anomaly Detection -->
+            <section class="card">
+                <h2 style="margin-bottom:1rem;">🔎 Anomaly Detection</h2>
+                <div class="controls" style="flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Metric:</label>
+                        <select id="anomaly-metric" style="padding: 0.4rem;">
+                            <option value="execution_time_seconds">Execution Time (s)</option>
+                            <option value="cpu_max">CPU Max (%)</option>
+                            <option value="memory_max_mb">Memory Max (MB)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Method:</label>
+                        <select id="anomaly-method" style="padding: 0.4rem;">
+                            <option value="iqr">IQR</option>
+                            <option value="zscore">Z-Score</option>
+                            <option value="mad">MAD</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Days:</label>
+                        <input type="number" id="anomaly-days" value="30" min="1" max="365" style="width: 80px; padding: 0.4rem;" />
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="fetchAnomalies()">Detect</button>
+                </div>
+                <div id="anomaly-result" style="color: var(--text-muted); font-size: 0.9rem;">Click "Detect" to run anomaly detection.</div>
+            </section>
+
+            <!-- Benchmarks -->
+            <section class="card">
+                <h2 style="margin-bottom:1rem;">🏁 Benchmarks</h2>
+                <div class="controls" style="flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;">
+                    <button class="btn btn-secondary btn-sm" onclick="fetchBenchmarks()">🔄 Load Benchmarks</button>
+                    <button class="btn btn-primary btn-sm" onclick="showCreateBenchmarkDialog()">+ Create Snapshot</button>
+                </div>
+                <div id="benchmarks-list" style="color: var(--text-muted);">Click "Load Benchmarks" to see results.</div>
+            </section>
+        </div><!-- /tab-analytics -->
+
+        <!-- ===== CI/CD TAB ===== -->
+        <div id="tab-cicd" class="tab-panel">
+            <section class="card">
+                <h2 style="margin-bottom:1rem;">⚙️ CI/CD Integration</h2>
+                <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Configure performance gates, manage baselines, and check regression results. Use the "Advanced Options" in the Runner tab to apply these settings to individual runs.</p>
+
+                <!-- Performance Gate Tester -->
+                <h3 style="margin-bottom: 0.75rem;">🚦 Performance Gate Tester</h3>
+                <p style="font-size: 0.875rem; color: var(--text-muted);">Enter a completed run ID and define gates to check against its metrics.</p>
+                <div class="controls" style="flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Run ID:</label>
+                        <input type="text" id="cicd-run-id" placeholder="paste run UUID..." style="padding: 0.4rem; min-width: 300px;" />
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="loadRunForCICD()">Load Run Metrics</button>
+                </div>
+                <div id="cicd-run-metrics" style="margin-bottom: 1rem; font-size: 0.875rem; color: var(--text-muted);">No run loaded.</div>
+                <div id="cicd-gates-result"></div>
+
+                <hr style="border: none; border-top: 1px solid var(--border-color); margin: 1.5rem 0;" />
+
+                <!-- Baseline Viewer -->
+                <h3 style="margin-bottom: 0.75rem;">📊 Baseline Calculator</h3>
+                <div class="controls" style="flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;">
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Script Path:</label>
+                        <input type="text" id="baseline-script-path" placeholder="all" style="padding: 0.4rem; min-width: 200px;" />
+                    </div>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Metric:</label>
+                        <input type="text" id="baseline-metric" placeholder="e.g. execution_time_seconds" style="padding: 0.4rem; min-width: 200px;" />
+                    </div>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Method:</label>
+                        <select id="baseline-method" style="padding: 0.4rem;">
+                            <option value="percentile">Percentile</option>
+                            <option value="iqr">IQR</option>
+                            <option value="intelligent">Intelligent</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Days:</label>
+                        <input type="number" id="baseline-days" value="30" min="1" max="365" style="width: 80px; padding: 0.4rem;" />
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="fetchBaseline()">Calculate</button>
+                </div>
+                <div id="baseline-result" style="color: var(--text-muted); font-size: 0.9rem;">Run baseline calculation to see results.</div>
+
+                <hr style="border: none; border-top: 1px solid var(--border-color); margin: 1.5rem 0;" />
+
+                <!-- Cleanup -->
+                <h3 style="margin-bottom: 0.75rem;">🗑️ Retention Policy</h3>
+                <div class="controls" style="flex-wrap: wrap; gap: 0.75rem;">
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+                        <label>Delete records older than:</label>
+                        <input type="number" id="retention-days" value="90" min="1" style="width: 80px; padding: 0.4rem;" />
+                        <span style="color: var(--text-muted);">days</span>
+                    </div>
+                    <button class="btn btn-sm" style="background:var(--danger-bg); color: var(--danger-text); border: 1px solid var(--danger-text);" onclick="runRetentionCleanup()">Run Cleanup</button>
+                </div>
+                <div id="retention-result" style="margin-top: 0.75rem; font-size: 0.875rem; color: var(--text-muted);"></div>
+            </section>
+        </div><!-- /tab-cicd -->
+
+        <!-- ===== SCHEDULER TAB ===== -->
+        <div id="tab-scheduler" class="tab-panel">
+            <section class="card">
+                <h2 style="margin-bottom:1rem;">🗓️ Task Scheduler
+                    <button class="btn btn-secondary btn-sm" style="margin-left: auto;" onclick="fetchSchedulerTasks()">🔄 Refresh</button>
+                    <button class="btn btn-primary btn-sm" style="margin-left: 0.5rem;" onclick="showAddTaskDialog()">+ New Task</button>
+                </h2>
+
+                <div class="controls" style="flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;">
+                    <button class="btn btn-secondary btn-sm" onclick="fetchDueTasks()">⏰ Check Due Tasks</button>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 0.5rem; margin-left: auto;">
+                        <label>Trigger Event:</label>
+                        <input type="text" id="scheduler-event-name" placeholder="e.g. deploy" style="padding: 0.4rem; min-width: 150px;" />
+                        <button class="btn btn-primary btn-sm" onclick="triggerEvent()">Fire</button>
+                    </div>
+                </div>
+
+                <div style="overflow-x: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Task ID</th>
+                                <th>Script</th>
+                                <th>Schedule / Cron</th>
+                                <th>Next Run</th>
+                                <th>Last Run</th>
+                                <th>Status</th>
+                                <th>Runs</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scheduler-tasks-table">
+                            <tr><td colspan="8" style="text-align:center;color:var(--text-muted);">No tasks registered. Add one to get started.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="due-tasks-result" style="margin-top: 1rem; font-size: 0.875rem; color: var(--text-muted);"></div>
+            </section>
+
+            <!-- Add Task Modal -->
+            <div id="add-task-modal" class="modal-backdrop">
+                <div class="modal">
+                    <div class="modal-header">
+                        <h3 style="margin:0;">Register Scheduled Task</h3>
+                        <button onclick="closeAddTaskDialog()" class="btn btn-secondary btn-sm">Cancel</button>
+                    </div>
+                    <div class="modal-body" style="padding:1.5rem; background: var(--card-bg); flex: 1; overflow: auto;">
+                        <div class="form-group"><label>Task ID</label><input type="text" id="task-id-input" placeholder="unique-task-id" /></div>
+                        <div class="form-group"><label>Script Path</label><input type="text" id="task-script-path-input" placeholder="./examples/sample_script.py" /></div>
+                        <div class="form-group"><label>Schedule (simple)</label><input type="text" id="task-schedule-input" placeholder="e.g. every 5 minutes" /></div>
+                        <div class="form-group"><label>Cron Expression</label><input type="text" id="task-cron-input" placeholder="e.g. */5 * * * *" /></div>
+                        <div class="form-group"><label>Script Arguments</label><input type="text" id="task-args-input" placeholder="--flag value" /></div>
+                        <div class="form-group"><label>Dependencies (task IDs, comma-separated)</label><input type="text" id="task-deps-input" placeholder="task1, task2" /></div>
+                        <div style="display:flex; justify-content:flex-end; gap:0.75rem; margin-top:1rem;">
+                            <button class="btn btn-secondary" onclick="closeAddTaskDialog()">Cancel</button>
+                            <button class="btn btn-primary" onclick="submitAddTask()">Register Task</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div><!-- /tab-scheduler -->
+
+    </div><!-- /container -->
+
+    <footer>
+        <div class="container" style="text-align: center; color: var(--text-muted); font-size: 0.875rem;">
+            <p>Powered by FastAPI & ScriptRunner</p>
+        </div>
+    </footer>
+
+    <!-- Modal -->
+    <div id="modal" class="modal-backdrop">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modal-title" style="margin: 0;">Execution Logs</h3>
+                <button onclick="closeModal()" class="btn btn-secondary btn-sm">Close</button>
+            </div>
+            <div class="modal-body">
+                <pre id="modal-body"></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Root Folder Dialog -->
+    <div id="add-root-modal" class="modal-backdrop">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 style="margin: 0;">Add Folder Root</h3>
+                <button onclick="closeAddRootDialog()" class="btn btn-secondary btn-sm">Cancel</button>
+            </div>
+            <div class="modal-body" style="padding: 1.5rem; background: var(--card-bg); flex: 1; overflow: auto;">
+                <form id="add-root-form" onsubmit="submitAddRoot(event)">
+                    <div class="form-group">
+                        <label for="root-folder-name">Display Name</label>
+                        <input type="text" id="root-folder-name" placeholder="e.g., My Scripts, Project A" required />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="root-folder-path">Folder Path</label>
+                        <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
+                            <input type="text" id="root-folder-path" placeholder="e.g., /home/user/scripts or C:\Users\user\Scripts" required style="flex: 1;" />
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="triggerFolderPicker()" title="Browse for folder">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                                Browse
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label><input type="checkbox" id="root-recursive" checked /> Scan subdirectories recursively</label>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="root-include-patterns">Include Patterns (comma-separated extensions, e.g., .py,.sh)</label>
+                        <input type="text" id="root-include-patterns" placeholder="Leave empty to include all supported types" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="root-exclude-patterns">Exclude Patterns (comma-separated globs, e.g., __pycache__/*,*.pyc)</label>
+                        <input type="text" id="root-exclude-patterns" placeholder="Leave empty to exclude nothing" />
+                    </div>
+
+                    <div style="margin-top: 2rem; display: flex; gap: 0.5rem; justify-content: flex-end;">
+                        <button type="button" class="btn btn-secondary" onclick="closeAddRootDialog()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Add Folder Root</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden file input for folder picker -->
+    <input type="file" id="hidden-folder-picker" webkitdirectory directory mozdirectory multiple style="display: none;" />
+
+    <!-- Toast -->
+    <div id="toast" class="toast">
+        <span id="toast-message"></span>
+    </div>
+
+    <script>
+        const runsTable = document.getElementById('runs-table');
+        const statusFilter = document.getElementById('status-filter');
+        const pageSizeInput = document.getElementById('page-size');
+        const runOption = document.getElementById('run-option');
+        const toastEl = document.getElementById('toast');
+
+        /** HTML-escape a value for safe insertion into template literals. */
+        function esc(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        /** Return color only if it is a valid #RRGGBB hex string, else a safe default. */
+        function hexColor(c) {
+            return /^#[0-9A-Fa-f]{6}$/.test(c) ? c : '#6366f1';
+        }
+
+        function addEnvVar() {
+            const container = document.getElementById('env-vars-container');
+            const div = document.createElement('div');
+            div.className = 'env-row';
+            div.innerHTML = `
+                <input type="text" placeholder="KEY" style="flex:1" class="env-key" />
+                <input type="text" placeholder="VALUE" style="flex:1" class="env-value" />
+                <button type="button" class="btn btn-secondary btn-sm" onclick="this.parentElement.remove()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            `;
+            container.appendChild(div);
+        }
+
+        function toggleScriptSource() {
+            const source = document.querySelector('input[name="script-source"]:checked').value;
+            const pathContainer = document.getElementById('path-input-container');
+            const fileContainer = document.getElementById('file-input-container');
+            
+            if (source === 'path') {
+                pathContainer.style.display = 'block';
+                fileContainer.style.display = 'none';
+            } else {
+                pathContainer.style.display = 'none';
+                fileContainer.style.display = 'block';
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const msgEl = document.getElementById('toast-message');
+            msgEl.textContent = message;
+            toastEl.className = `toast ${type} show`;
+            setTimeout(() => {
+                toastEl.classList.remove('show');
+            }, 3000);
+        }
+
+        function statusBadge(status) {
+            const cls = `status-${status.toLowerCase()}`;
+            return `<span class="status-badge ${cls}">${status}</span>`;
+        }
+
+        let logPollInterval = null;
+
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+            document.getElementById('modal-body').textContent = '';
+            if (logPollInterval) {
+                clearInterval(logPollInterval);
+                logPollInterval = null;
+            }
+        }
+
+        async function viewLogs(runId) {
+            if (logPollInterval) clearInterval(logPollInterval);
+            
+            document.getElementById('modal-title').textContent = `Logs: ${runId.slice(0, 8)}...`;
+            document.getElementById('modal').style.display = 'flex';
+            const logPre = document.getElementById('modal-body');
+            const logContainer = logPre.parentElement;
+            logPre.textContent = 'Loading logs...';
+
+            const fetchLogs = async () => {
+                try {
+                    const res = await fetch(`/api/runs/${runId}/logs`);
+                    if (!res.ok) return;
+                    const body = await res.text();
+                    
+                    // Check if user is near bottom
+                    const isScrolledToBottom = logContainer.scrollHeight - logContainer.scrollTop <= logContainer.clientHeight + 100;
+                    
+                    logPre.textContent = body || 'No logs captured yet.';
+                    
+                    if (isScrolledToBottom) {
+                        logContainer.scrollTop = logContainer.scrollHeight;
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            };
+
+            await fetchLogs();
+            
+            // Check status to see if we should poll
+            try {
+                const res = await fetch(`/api/runs/${runId}`);
+                if (res.ok) {
+                    const run = await res.json();
+                    if (['queued', 'running'].includes(run.status)) {
+                        logPollInterval = setInterval(fetchLogs, 1000);
+                    }
+                }
+            } catch (e) {}
+        }
+
+        async function cancelRun(runId) {
+            if (!confirm('Are you sure you want to cancel this run?')) return;
+            
+            const res = await fetch(`/api/runs/${runId}/cancel`, { method: 'POST' });
+            if (!res.ok) {
+                showToast('Unable to cancel run', 'error');
+                return;
+            }
+            showToast(`Run ${runId.slice(0, 8)}... cancelled`);
+            fetchRuns();
+        }
+
+        async function stopRun(runId) {
+            const res = await fetch(`/api/runs/${runId}/stop`, { method: 'POST' });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                showToast(err.detail || 'Unable to stop run', 'error');
+                return;
+            }
+            showToast(`Stop signal sent to ${runId.slice(0, 8)}...`);
+            fetchRuns();
+        }
+
+        async function killRun(runId) {
+            if (!confirm('Force kill this run? All child processes will be terminated immediately.')) return;
+            const res = await fetch(`/api/runs/${runId}/kill`, { method: 'POST' });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                showToast(err.detail || 'Unable to kill run', 'error');
+                return;
+            }
+            showToast(`Kill signal sent to ${runId.slice(0, 8)}...`, 'error');
+            fetchRuns();
+        }
+
+        async function restartRun(runId) {
+            if (!confirm('Restart this run with the same configuration?')) return;
+            const res = await fetch(`/api/runs/${runId}/restart`, { method: 'POST' });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                showToast(err.detail || 'Unable to restart run', 'error');
+                return;
+            }
+            const data = await res.json();
+            showToast(`New run queued: ${data.run_id ? data.run_id.slice(0, 8) : ''}...`);
+            fetchRuns();
+            fetchStats();
+        }
+
+        async function viewDetails(runId) {
+            document.getElementById('modal-title').textContent = `Details: ${runId.slice(0, 8)}...`;
+            document.getElementById('modal').style.display = 'flex';
+            const logPre = document.getElementById('modal-body');
+            logPre.textContent = 'Loading...';
+
+            try {
+                const [runRes, eventsRes] = await Promise.all([
+                    fetch(`/api/runs/${runId}`),
+                    fetch(`/api/runs/${runId}/events`)
+                ]);
+                const run = runRes.ok ? await runRes.json() : null;
+                const events = eventsRes.ok ? await eventsRes.json() : [];
+
+                if (!run) { logPre.textContent = 'Run not found.'; return; }
+
+                const lines = [];
+                lines.push(`Run ID:         ${run.id}`);
+                lines.push(`Job Status:     ${run.status}`);
+                lines.push(`Runner Status:  ${run.run_status || '—'}`);
+                lines.push(`Correlation ID: ${run.correlation_id || '—'}`);
+                lines.push(`Script:         ${run.request.script_path}`);
+                lines.push(`Args:           ${(run.request.args || []).join(' ') || '—'}`);
+                lines.push(`Working Dir:    ${run.request.working_dir || '(default)'}`);
+                lines.push(`Timeout:        ${run.request.timeout || '—'}`);
+                lines.push(`Stream Output:  ${run.request.stream_output ? 'yes' : 'no'}`);
+                lines.push(`Started:        ${new Date(run.started_at).toLocaleString()}`);
+                lines.push(`Finished:       ${run.finished_at ? new Date(run.finished_at).toLocaleString() : '—'}`);
+                if (run.error_summary) {
+                    lines.push('\n--- Error Summary ---');
+                    lines.push(JSON.stringify(run.error_summary, null, 2));
+                }
+                if (run.result && run.result.metrics) {
+                    const m = run.result.metrics;
+                    lines.push('\n--- Metrics ---');
+                    lines.push(`Execution Time: ${m.execution_time_seconds ?? '—'}s`);
+                    lines.push(`Exit Code:      ${m.exit_code ?? '—'}`);
+                    lines.push(`CPU Max:        ${m.cpu_max ?? '—'}%`);
+                    lines.push(`Memory Max:     ${m.memory_max_mb ?? '—'} MB`);
+                }
+                if (events.length) {
+                    lines.push('\n--- Structured Events ---');
+                    events.forEach(ev => {
+                        lines.push(`[${ev.timestamp}] ${ev.event_type}: ${JSON.stringify(ev.data)}`);
+                    });
+                }
+                logPre.textContent = lines.join('\n');
+            } catch (e) {
+                logPre.textContent = 'Failed to load details.';
+            }
+        }
+
+        function formatDuration(start, end) {
+            if (!end) return '—';
+            const ms = new Date(end) - new Date(start);
+            return (ms / 1000).toFixed(2) + 's';
+        }
+
+        function compactDate(dateStr) {
+            if (!dateStr) return '—';
+            const d = new Date(dateStr);
+            const now = new Date();
+            const isToday = d.toDateString() === now.toDateString();
+            const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+            const isYesterday = d.toDateString() === yesterday.toDateString();
+            if (isToday) return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+            if (isYesterday) return 'Yesterday\u00a0' + d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            return d.toLocaleDateString([], {month:'short', day:'numeric'})
+                 + '\u00a0' + d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+        }
+
+        async function fetchRuns() {
+            const params = new URLSearchParams();
+            const limit = Number(pageSizeInput.value) || 50;
+            params.append('limit', limit);
+            if (statusFilter.value) {
+                params.append('status', statusFilter.value);
+            }
+
+            try {
+                const res = await fetch(`/api/runs?${params.toString()}`);
+                if (!res.ok) throw new Error('Failed to fetch');
+                
+                const runs = await res.json();
+                if (!runs.length) {
+                    runsTable.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem;">No runs found.</td></tr>';
+                    return;
+                }
+                
+                runsTable.innerHTML = runs.map(run => {
+                    const started = compactDate(run.started_at);
+                    const duration = formatDuration(run.started_at, run.finished_at);
+                    const args = (run.request.args || []).join(' ');
+                    const canCancel = ['queued', 'running'].includes(run.status.toLowerCase());
+                    const safeId = esc(run.id);
+                    // Merge status + script + ID + dir + corr + args into one cell
+                    const safeRunStatus = esc(run.run_status || '');
+                    const runStatusBadge = run.run_status
+                        ? `<span class="status-badge status-${safeRunStatus}" style="font-size:0.68rem">${safeRunStatus}</span>`
+                        : '';
+                    const fullPath = run.request.script_path || '';
+                    const fileName = fullPath.split(/[\\/]/).pop() || fullPath;
+                    const dirPart = fullPath.length > fileName.length ? fullPath.slice(0, fullPath.length - fileName.length - 1) : '';
+                    const corrPill = run.correlation_id
+                        ? `<span class="code-pill" style="font-size:0.68rem;opacity:0.75" title="Corr: ${esc(run.correlation_id)}">${esc(run.correlation_id.slice(0, 8))}</span>`
+                        : '';
+                    const argsBadge = args
+                        ? `<span style="font-size:0.72rem;color:var(--primary);cursor:default;font-weight:500" title="${esc(args)}">+args</span>`
+                        : '';
+                    const scriptCell = `<div style="line-height:1.4;min-width:0">
+                        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+                            ${statusBadge(run.status)}${runStatusBadge ? '&thinsp;' + runStatusBadge : ''}
+                            <span style="font-weight:600;font-size:0.88rem" title="${esc(fullPath)}">${esc(fileName)}</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:5px;margin-top:3px;flex-wrap:wrap">
+                            <span class="code-pill" style="font-size:0.68rem;opacity:0.7" title="Run ID: ${safeId}">${esc(run.id.slice(0, 8))}</span>
+                            ${dirPart ? `<span style="font-size:0.72rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px" title="${esc(fullPath)}">${esc(dirPart)}</span>` : ''}
+                            ${corrPill}${argsBadge}
+                        </div>
+                    </div>`;
+
+                    return `<tr>
+                        <td style="padding:0.5rem 0.4rem"><input type="checkbox" class="row-select" data-id="${safeId}" onclick="updateBulkActions()" /></td>
+                        <td style="padding:0.5rem 0.75rem">${scriptCell}</td>
+                        <td style="padding:0.5rem 0.75rem;font-size:0.82rem;white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--text-muted)">${started}</td>
+                        <td style="padding:0.5rem 0.75rem;font-size:0.82rem;white-space:nowrap;font-variant-numeric:tabular-nums">${duration}</td>
+                        <td style="padding:0.5rem 0.4rem;text-align:right;white-space:nowrap">
+                            <button class="btn-icon" onclick="viewLogs('${safeId}')" title="View Logs">&#9776;</button>
+                            <button class="btn-icon" onclick="viewDetails('${safeId}')" title="Details">&#9432;</button>
+                            ${!canCancel ? `<button class="btn-icon" style="color:var(--primary)" onclick="viewVisualization('${safeId}')" title="Execution Flow">&#9889;</button>` : ''}
+                            ${canCancel ? `<button class="btn-icon" style="color:var(--warning-text)" onclick="stopRun('${safeId}')" title="Graceful Stop">&#9632;</button>` : ''}
+                            ${canCancel ? `<button class="btn-icon" style="color:var(--danger-text)" onclick="killRun('${safeId}')" title="Force Kill">&#10005;</button>` : ''}
+                            ${!canCancel ? `<button class="btn-icon" onclick="restartRun('${safeId}')" title="Re-run with same config">&#8634;</button>` : ''}
+                        </td>
+                    </tr>`;
+                }).join('');
+            } catch (e) {
+                showToast('Unable to load runs', 'error');
+            }
+        }
+
+        async function fetchStats() {
+            try {
+                const res = await fetch('/api/stats');
+                if (!res.ok) return;
+                const stats = await res.json();
+                
+                document.getElementById('stat-total').textContent = stats.total_runs;
+                document.getElementById('stat-24h').textContent = stats.runs_24h;
+                
+                const completed = stats.by_status.completed || 0;
+                // If total is 0, success rate is 0%
+                const rate = stats.total_runs > 0 ? Math.round((completed / stats.total_runs) * 100) : 0;
+                document.getElementById('stat-success').textContent = rate + '%';
+            } catch (e) {
+                console.error('Failed to fetch stats', e);
+            }
+        }
+
+        async function fetchSystemStatus() {
+            try {
+                const res = await fetch('/api/system/status');
+                if (!res.ok) return;
+                const data = await res.json();
+                
+                // CPU load is [1min, 5min, 15min]
+                // We'll show the 1min load. Note: this is not a percentage, but load avg.
+                // We will replace the inner text, keeping the label.
+                if (data.cpu_load && data.cpu_load.length > 0) {
+                    document.getElementById('cpu-load').textContent = data.cpu_load[0].toFixed(2);
+                }
+                
+                if (data.memory && data.memory.percent !== undefined) {
+                    document.getElementById('mem-usage').textContent = data.memory.percent + '%';
+                }
+            } catch (e) {
+                console.error('Failed to fetch system status', e);
+            }
+        }
+
+        async function launchRun(event) {
+            event.preventDefault();
+            
+            const source = document.querySelector('input[name="script-source"]:checked').value;
+            const args = [];
+            if (runOption.value) args.push(runOption.value);
+            
+            const extraArgs = (document.getElementById('script-args').value || '')
+                .split(',')
+                .map(v => v.trim())
+                .filter(Boolean);
+            args.push(...extraArgs);
+
+            const timeout = document.getElementById('timeout').value || null;
+            const logLevel = document.getElementById('log-level').value;
+            const retry = document.getElementById('retry').value === 'true';
+            const workingDir = document.getElementById('working-dir').value.trim() || null;
+            const streamOutput = document.getElementById('stream-output').checked;
+            const enableVisualizer = document.getElementById('enable-visualizer').checked;
+            const visualizerFormat = document.getElementById('visualizer-format').value;
+            const dryRun = document.getElementById('dry-run').checked;
+            const enableCodeAnalysis = document.getElementById('enable-code-analysis').checked;
+            const enableSecretScanning = document.getElementById('enable-secret-scanning').checked;
+            const enableDepScanning = document.getElementById('enable-dependency-scanning').checked;
+
+            // Advanced options
+            const retryStrategy = document.getElementById('adv-retry-strategy').value;
+            const retryMaxAttempts = parseInt(document.getElementById('adv-retry-max-attempts').value) || 3;
+            const retryInitialDelay = parseFloat(document.getElementById('adv-retry-initial-delay').value) || 1.0;
+            const retryMaxDelay = parseFloat(document.getElementById('adv-retry-max-delay').value) || 60.0;
+            const monitorInterval = parseFloat(document.getElementById('adv-monitor-interval').value) || 0.1;
+            const loadBaseline = document.getElementById('adv-load-baseline').value.trim() || null;
+            const saveBaseline = document.getElementById('adv-save-baseline').value.trim() || null;
+            const junitOutput = document.getElementById('adv-junit-output').value.trim() || null;
+            const slackWebhook = document.getElementById('adv-slack-webhook').value.trim() || null;
+
+            // Collect performance gates
+            const performanceGates = [];
+            document.querySelectorAll('#perf-gates-list .gate-row').forEach(row => {
+                const metric = row.querySelector('.gate-metric').value.trim();
+                const maxVal = row.querySelector('.gate-max').value.trim();
+                const minVal = row.querySelector('.gate-min').value.trim();
+                if (metric) {
+                    const gate = { metric };
+                    if (maxVal !== '') gate.max_value = parseFloat(maxVal);
+                    if (minVal !== '') gate.min_value = parseFloat(minVal);
+                    performanceGates.push(gate);
+                }
+            });
+
+            // Collect alerts
+            const alerts = [];
+            document.querySelectorAll('#alerts-list .alert-row').forEach(row => {
+                const name = row.querySelector('.alert-name').value.trim();
+                const condition = row.querySelector('.alert-condition').value.trim();
+                const severity = row.querySelector('.alert-severity').value;
+                if (name && condition) alerts.push({ name, condition, severity, channels: ['slack'] });
+            });
+
+            const envVars = {};
+            document.querySelectorAll('#env-vars-container .env-row').forEach(row => {
+                const key = row.querySelector('.env-key').value.trim();
+                const val = row.querySelector('.env-value').value.trim();
+                if (key) envVars[key] = val;
+            });
+
+            try {
+                let res;
+                if (source === 'path') {
+                    const scriptPath = document.getElementById('script-path').value.trim();
+                    if (!scriptPath) {
+                        showToast('Script path is required', 'error');
+                        return;
+                    }
+                    
+                    const payload = {
+                        script_path: scriptPath,
+                        args,
+                        timeout,
+                        log_level: logLevel,
+                        retry_on_failure: retry,
+                        env_vars: envVars,
+                        working_dir: workingDir,
+                        stream_output: streamOutput,
+                        enable_visualizer: enableVisualizer,
+                        visualizer_format: visualizerFormat,
+                        dry_run: dryRun,
+                        enable_code_analysis: enableCodeAnalysis,
+                        enable_secret_scanning: enableSecretScanning,
+                        enable_dependency_scanning: enableDepScanning,
+                        retry_strategy: retryStrategy,
+                        retry_max_attempts: retryMaxAttempts,
+                        retry_initial_delay: retryInitialDelay,
+                        retry_max_delay: retryMaxDelay,
+                        monitor_interval: monitorInterval,
+                        load_baseline: loadBaseline,
+                        save_baseline: saveBaseline,
+                        junit_output: junitOutput,
+                        slack_webhook: slackWebhook,
+                        performance_gates: performanceGates,
+                        alerts: alerts,
+                    };
+
+                    res = await fetch('/api/run', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                } else {
+                    const fileInput = document.getElementById('script-file');
+                    if (!fileInput.files.length) {
+                        showToast('Please select a file', 'error');
+                        return;
+                    }
+                    
+                    const formData = new FormData();
+                    formData.append('file', fileInput.files[0]);
+                    formData.append('args', args.join(','));
+                    if (timeout) formData.append('timeout', timeout);
+                    formData.append('log_level', logLevel);
+                    formData.append('retry_on_failure', retry);
+                    formData.append('env_vars', JSON.stringify(envVars));
+                    if (workingDir) formData.append('working_dir', workingDir);
+                    formData.append('stream_output', streamOutput);
+                    
+                    res = await fetch('/api/run/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                }
+                
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    showToast(err.detail || 'Unable to start run', 'error');
+                    return;
+                }
+                
+                const data = await res.json();
+                showToast(`Run queued successfully`, 'success');
+                document.getElementById('run-form').reset();
+                // Reset radio button state
+                document.querySelector('input[name="script-source"][value="path"]').checked = true;
+                toggleScriptSource();
+                fetchRuns();
+                fetchStats();
+                fetchSystemStatus();
+            } catch (e) {
+                showToast('Network error occurred', 'error');
+            }
+        }
+
+        document.getElementById('run-form').addEventListener('submit', launchRun);
+
+        // Toggle visualizer format dropdown visibility
+        document.getElementById('enable-visualizer').addEventListener('change', function() {
+            document.getElementById('visualizer-format-group').style.display = this.checked ? 'flex' : 'none';
+        });
+
+        async function viewVisualization(runId) {
+            document.getElementById('modal-title').textContent = `⚡ Execution Flow: ${runId.slice(0, 8)}...`;
+            document.getElementById('modal').style.display = 'flex';
+            const pre = document.getElementById('modal-body');
+            pre.textContent = 'Loading visualization…';
+
+            try {
+                const res = await fetch(`/api/runs/${runId}/visualization`);
+                if (res.status === 422) {
+                    const err = await res.json();
+                    pre.textContent = `⚠️  ${err.detail}\n\nTo see the execution flow, re-run the script with "Enable Execution Visualizer" checked.`;
+                    return;
+                }
+                if (!res.ok) {
+                    pre.textContent = 'Failed to load visualization.';
+                    return;
+                }
+                const data = await res.json();
+
+                // Render the report into readable text
+                const lines = [];
+                if (data.header) {
+                    lines.push('╔══════════════════════════════════════════════════════════════════╗');
+                    lines.push('   SCRIPT EXECUTION FLOW VISUALIZATION');
+                    lines.push('╚══════════════════════════════════════════════════════════════════╝');
+                    lines.push(`  Script:   ${data.header.script_path || '—'}`);
+                    if (data.header.args && data.header.args.length) {
+                        lines.push(`  Args:     ${data.header.args.join(' ')}`);
+                    }
+                    lines.push(`  Started:  ${data.header.started || '—'}`);
+                    lines.push(`  Attempt:  ${data.header.attempt || 1}`);
+                    lines.push('');
+                }
+
+                if (data.steps && data.steps.length) {
+                    lines.push('  ─── Execution Steps ────────────────────────────────────────────');
+                    data.steps.forEach((step, i) => {
+                        const num = String(i + 1).padStart(2, '0');
+                        const duration = step.duration_s != null ? ` (${step.duration_s.toFixed(3)}s)` : '';
+                        const elapsed = step.elapsed_s != null ? ` +${step.elapsed_s.toFixed(3)}s` : '';
+                        const statusIcon = {
+                            done: '✓', skip: '⊘', running: '▶', error: '✗'
+                        }[step.status] || '•';
+                        lines.push(`  [${num}] ${statusIcon}  ${step.stage || ''} — ${step.detail || ''}${duration}${elapsed}`);
+                    });
+                    lines.push('');
+                }
+
+                if (data.footer) {
+                    const success = data.footer.success;
+                    lines.push('══════════════════════════════════════════════════════════════════');
+                    lines.push(`  EXECUTION ${success ? '✓ SUCCESS' : '✗ FAILED'}`);
+                    lines.push('══════════════════════════════════════════════════════════════════');
+                    lines.push(`  Total Time:      ${data.footer.execution_time_s ?? '—'}s`);
+                    lines.push(`  Exit Code:       ${data.footer.returncode ?? '—'}`);
+                    lines.push(`  Steps Completed: ${data.footer.steps_completed ?? '—'}`);
+                    lines.push(`  Ended:           ${data.footer.ended || '—'}`);
+                }
+
+                pre.textContent = lines.join('\n');
+            } catch (e) {
+                pre.textContent = 'Error loading visualization.';
+            }
+        }
+        document.getElementById('refresh-btn').addEventListener('click', () => {
+            fetchRuns();
+            fetchStats();
+            fetchSystemStatus();
+        });
+        statusFilter.addEventListener('change', fetchRuns);
+        pageSizeInput.addEventListener('change', fetchRuns);
+        document.getElementById('modal').addEventListener('click', (e) => { 
+            if (e.target.classList.contains('modal-backdrop')) closeModal(); 
+        });
+        document.getElementById('add-root-modal').addEventListener('click', (e) => { 
+            if (e.target.id === 'add-root-modal') closeAddRootDialog(); 
+        });
+        
+        // Initial load
+        fetchRuns();
+        fetchStats();
+        fetchSystemStatus();
+        // Auto refresh every 5 seconds
+        setInterval(() => {
+            fetchRuns();
+            fetchStats();
+            fetchSystemStatus();
+        }, 5000);
+
+        // =====================================================================
+        // Library Tab JavaScript
+        // =====================================================================
+
+        let libPage = 1;
+        let libSearchTimer = null;
+
+        function switchTab(name, btn) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            document.getElementById('tab-' + name).classList.add('active');
+            if (btn) btn.classList.add('active');
+            if (name === 'library') {
+                fetchLibStats();
+                fetchFolderRoots();
+                fetchLibTags();
+                fetchLibScripts();
+            }
+            if (name === 'analytics') {
+                fetchAnalyticsStats();
+            }
+            if (name === 'scheduler') {
+                fetchSchedulerTasks();
+            }
+        }
+
+        function debouncedLibSearch() {
+            clearTimeout(libSearchTimer);
+            libSearchTimer = setTimeout(() => { libPage = 1; fetchLibScripts(); }, 400);
+        }
+
+        // --- Library Stats ---
+        async function fetchLibStats() {
+            try {
+                const r = await fetch('/api/library/stats');
+                if (!r.ok) return;
+                const d = await r.json();
+                document.getElementById('lib-stat-scripts').textContent = d.total_scripts ?? 0;
+                document.getElementById('lib-stat-roots').textContent = d.total_roots ?? 0;
+                document.getElementById('lib-stat-tags').textContent = d.total_tags ?? 0;
+
+                // Populate language filter
+                const langSel = document.getElementById('lib-lang-filter');
+                const curLang = langSel.value;
+                langSel.innerHTML = '<option value="">All</option>';
+                for (const [lang, cnt] of Object.entries(d.by_language || {})) {
+                    const opt = document.createElement('option');
+                    opt.value = lang; opt.textContent = `${lang} (${cnt})`;
+                    if (lang === curLang) opt.selected = true;
+                    langSel.appendChild(opt);
+                }
+            } catch(e) { console.error('lib stats', e); }
+        }
+
+        // --- Folder Roots ---
+        async function fetchFolderRoots() {
+            try {
+                const r = await fetch('/api/library/folder-roots');
+                if (!r.ok) return;
+                const roots = await r.json();
+                const container = document.getElementById('folder-roots-list');
+
+                // Populate root filter select
+                const rootSel = document.getElementById('lib-root-filter');
+                const curRoot = rootSel.value;
+                rootSel.innerHTML = '<option value="">All</option>';
+                roots.forEach(root => {
+                    const opt = document.createElement('option');
+                    opt.value = root.id; opt.textContent = root.name;
+                    if (String(root.id) === curRoot) opt.selected = true;
+                    rootSel.appendChild(opt);
+                });
+
+                if (!roots.length) {
+                    container.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 1rem;">No folder roots added yet.</p>';
+                    return;
+                }
+                container.innerHTML = roots.map(root => `
+                    <div style="display:flex; align-items:center; gap:1rem; padding:0.75rem 0; border-bottom:1px solid var(--border-color);">
+                        <div style="flex:1; min-width:0;">
+                            <div style="font-weight:600;">${esc(root.name)}</div>
+                            <div style="font-size:0.8rem; color:var(--text-muted); word-break:break-all;">${esc(root.path)}</div>
+                            <div style="font-size:0.75rem; color:var(--text-muted);">
+                                ${root.recursive ? '↳ recursive' : '↳ flat'} 
+                                ${root.last_scan_at ? '· Last scan: ' + new Date(root.last_scan_at).toLocaleString() : '· Never scanned'}
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:0.5rem; flex-shrink:0;">
+                            <button class="btn btn-secondary btn-sm" onclick="triggerScan(${root.id}, this)">Scan</button>
+                            <button class="btn btn-secondary btn-sm" style="color:var(--danger-text);" onclick="deleteRoot(${root.id})">Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch(e) { console.error('folder roots', e); }
+        }
+
+        async function triggerScan(rootId, btn) {
+            btn.disabled = true; btn.textContent = 'Scanning…';
+            try {
+                const r = await fetch(`/api/library/folder-roots/${rootId}/scan`, { method: 'POST' });
+                if (!r.ok) { showToast('Scan failed', 'error'); return; }
+                const d = await r.json();
+                showToast(`Scan started (id: ${d.scan_id})`);
+                // Poll until complete
+                const poll = setInterval(async () => {
+                    try {
+                        const sr = await fetch(`/api/library/folder-roots/${rootId}/scan/${d.scan_id}`);
+                        if (!sr.ok) return;
+                        const sd = await sr.json();
+                        if (sd.status !== 'running') {
+                            clearInterval(poll);
+                            btn.disabled = false; btn.textContent = 'Scan';
+                            fetchFolderRoots();
+                            fetchLibStats();
+                            fetchLibScripts();
+                            showToast(`Scan done: +${sd.new_count} new, ${sd.updated_count} updated, ${sd.deleted_count} removed`);
+                        }
+                    } catch(e) { clearInterval(poll); btn.disabled = false; btn.textContent = 'Scan'; }
+                }, 1500);
+            } catch(e) { btn.disabled = false; btn.textContent = 'Scan'; showToast('Network error', 'error'); }
+        }
+
+        async function deleteRoot(rootId) {
+            if (!confirm('Delete this folder root and remove all its indexed scripts?')) return;
+            await fetch(`/api/library/folder-roots/${rootId}`, { method: 'DELETE' });
+            fetchFolderRoots();
+            fetchLibStats();
+            fetchLibScripts();
+        }
+
+        function showAddRootDialog() {
+            document.getElementById('add-root-modal').style.display = 'flex';
+            document.getElementById('root-folder-name').value = '';
+            document.getElementById('root-folder-path').value = '';
+            document.getElementById('root-recursive').checked = true;
+            document.getElementById('root-include-patterns').value = '';
+            document.getElementById('root-exclude-patterns').value = '';
+        }
+
+        function closeAddRootDialog() {
+            document.getElementById('add-root-modal').style.display = 'none';
+        }
+
+        function triggerFolderPicker() {
+            document.getElementById('hidden-folder-picker').click();
+        }
+
+        document.getElementById('hidden-folder-picker').addEventListener('change', function(e) {
+            if (e.target.files && e.target.files.length > 0) {
+                // Get the first file's path and extract the directory
+                const firstFile = e.target.files[0];
+                const fullPath = firstFile.webkitRelativePath || firstFile.name;
+                // Extract directory path (removes the filename)
+                const pathParts = fullPath.split('/');
+                const folderPath = pathParts.slice(0, -1).join('/');
+                document.getElementById('root-folder-path').value = folderPath || '/';
+            }
+        });
+
+        async function submitAddRoot(event) {
+            event.preventDefault();
+            
+            const name = document.getElementById('root-folder-name').value.trim();
+            const path = document.getElementById('root-folder-path').value.trim();
+            const recursive = document.getElementById('root-recursive').checked;
+            const includePatterns = document.getElementById('root-include-patterns').value.trim();
+            const excludePatterns = document.getElementById('root-exclude-patterns').value.trim();
+
+            if (!name || !path) {
+                showToast('Please fill in all required fields', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/library/folder-roots', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name,
+                        path,
+                        recursive,
+                        include_patterns: includePatterns,
+                        exclude_patterns: excludePatterns
+                    })
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    showToast(err.detail || 'Error adding folder root', 'error');
+                    return;
+                }
+
+                closeAddRootDialog();
+                showToast('Folder root added successfully');
+                fetchFolderRoots();
+                fetchLibStats();
+            } catch (e) {
+                showToast('Network error occurred', 'error');
+            }
+        }
+
+        // --- Tags ---
+        async function fetchLibTags() {
+            try {
+                const r = await fetch('/api/library/tags');
+                if (!r.ok) return;
+                const tags = await r.json();
+                const container = document.getElementById('lib-tags-list');
+                const tagSel = document.getElementById('lib-tag-filter');
+                const curTag = tagSel.value;
+                tagSel.innerHTML = '<option value="">All</option>';
+                tags.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.name; opt.textContent = `${t.name} (${t.script_count})`;
+                    if (t.name === curTag) opt.selected = true;
+                    tagSel.appendChild(opt);
+                });
+                if (!tags.length) {
+                    container.innerHTML = '<span style="color:var(--text-muted)">No tags yet.</span>';
+                    return;
+                }
+                container.innerHTML = tags.map(t => {
+                    const c = hexColor(t.color);
+                    return `<span class="tag-pill" style="background:${c}22; color:${c}; border:1px solid ${c}44;">
+                        ${esc(t.name)} <small>(${t.script_count})</small>
+                        <button style="border:none;background:none;cursor:pointer;font-size:0.9rem;color:${c};" title="Delete" onclick="deleteTag(${t.id}, event)">×</button>
+                    </span>`;
+                }).join('');
+            } catch(e) { console.error('tags', e); }
+        }
+
+        function showAddTagDialog() {
+            const name = prompt('Tag name:');
+            if (!name) return;
+            const color = prompt('Tag color (hex, e.g. #6366f1):', '#6366f1') || '#6366f1';
+            fetch('/api/library/tags', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, color })
+            }).then(async r => {
+                if (!r.ok) { const e = await r.json(); showToast(e.detail || 'Error', 'error'); return; }
+                showToast('Tag created');
+                fetchLibTags();
+            });
+        }
+
+        async function deleteTag(tagId, e) {
+            e.stopPropagation();
+            if (!confirm('Delete this tag?')) return;
+            await fetch(`/api/library/tags/${tagId}`, { method: 'DELETE' });
+            fetchLibTags();
+            fetchLibScripts();
+        }
+
+        // --- Script Browser ---
+        async function fetchLibScripts() {
+            const params = new URLSearchParams();
+            params.set('page', libPage);
+            params.set('page_size', 50);
+            const search = document.getElementById('lib-search').value.trim();
+            if (search) params.set('search', search);
+            const lang = document.getElementById('lib-lang-filter').value;
+            if (lang) params.set('language', lang);
+            const status = document.getElementById('lib-status-filter').value;
+            if (status) params.set('status', status);
+            const tag = document.getElementById('lib-tag-filter').value;
+            if (tag) params.set('tag', tag);
+            const root = document.getElementById('lib-root-filter').value;
+            if (root) params.set('root_id', root);
+
+            try {
+                const r = await fetch('/api/library/scripts?' + params.toString());
+                if (!r.ok) return;
+                const data = await r.json();
+                const tbody = document.getElementById('lib-scripts-table');
+
+                document.getElementById('lib-page-info').textContent = `Page ${data.page} / ${data.total_pages} (${data.total} scripts)`;
+                document.getElementById('lib-prev-page').disabled = data.page <= 1;
+                document.getElementById('lib-next-page').disabled = data.page >= data.total_pages;
+
+                if (!data.items.length) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-muted)">No scripts found.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.items.map(s => {
+                    const tags = (s.tags || []).map(t => `<span class="tag-pill">${esc(t)}</span>`).join(' ');
+                    const status = s.lifecycle_status || 'active';
+                    const statusCls = { active:'lifecycle-active', draft:'lifecycle-draft', deprecated:'lifecycle-deprecated', archived:'lifecycle-archived' }[status] || 'lifecycle-active';
+                    return `<tr>
+                        <td style="font-weight:500;">${esc(s.name)}</td>
+                        <td class="hide-mobile"><div class="script-path" style="font-size:0.8rem;color:var(--text-muted);">${esc(s.path)}</div></td>
+                        <td>${s.language ? `<span class="lang-badge">${esc(s.language)}</span>` : '—'}</td>
+                        <td><span class="lifecycle-badge ${statusCls}">${esc(status)}</span></td>
+                        <td class="hide-mobile">${tags || '—'}</td>
+                        <td class="hide-mobile" style="font-size:0.85rem;">${s.line_count ?? '—'}</td>
+                        <td class="actions">
+                            <button class="btn btn-secondary btn-sm" onclick="viewLibScriptContent(${s.id}, ${esc(JSON.stringify(s.name))})">View</button>
+                            <button class="btn btn-secondary btn-sm" onclick="editLibScriptStatus(${s.id}, ${esc(JSON.stringify(s.name))})" title="Edit status/notes">Edit</button>
+                            <button class="btn btn-primary btn-sm" onclick="runLibScript(${s.id}, ${esc(JSON.stringify(s.path))})">▶ Run</button>
+                        </td>
+                    </tr>`;
+                }).join('');
+            } catch(e) { console.error('lib scripts', e); }
+        }
+
+        function libChangePage(delta) {
+            libPage = Math.max(1, libPage + delta);
+            fetchLibScripts();
+        }
+
+        async function viewLibScriptContent(scriptId, name) {
+            document.getElementById('modal-title').textContent = `📄 ${name}`;
+            document.getElementById('modal').style.display = 'flex';
+            const pre = document.getElementById('modal-body');
+            pre.textContent = 'Loading…';
+            try {
+                const r = await fetch(`/api/library/scripts/${scriptId}/content`);
+                if (!r.ok) { pre.textContent = 'Could not load file.'; return; }
+                const d = await r.json();
+                pre.textContent = d.content;
+            } catch(e) { pre.textContent = 'Error loading content.'; }
+        }
+
+        async function editLibScriptStatus(scriptId, name) {
+            // Fetch current values
+            const r = await fetch(`/api/library/scripts/${scriptId}`);
+            const s = r.ok ? await r.json() : {};
+            const status = prompt(`Status (active/draft/deprecated/archived):`, s.lifecycle_status || 'active');
+            if (status === null) return;
+            const owner = prompt('Owner:', s.owner || '');
+            if (owner === null) return;
+            const notes = prompt('Notes:', s.notes || '');
+            if (notes === null) return;
+            await fetch(`/api/library/scripts/${scriptId}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status, owner, notes })
+            });
+            showToast('Updated');
+            fetchLibScripts();
+        }
+
+        async function runLibScript(scriptId, path) {
+            const r = await fetch(`/api/library/scripts/${scriptId}/run`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enable_history: false })
+            });
+            if (!r.ok) { const e = await r.json(); showToast(e.detail || 'Error', 'error'); return; }
+            const d = await r.json();
+            showToast(`Run queued: ${d.run_id ? d.run_id.slice(0,8) : ''}…`);
+            // Switch to runner tab to show progress
+            document.querySelector('.tab-btn[onclick*="runner"]').click();
+            setTimeout(fetchRuns, 500);
+        }
+
+        // --- Duplicates ---
+        async function fetchLibDuplicates() {
+            const panel = document.getElementById('lib-duplicates-panel');
+            panel.style.display = 'block';
+            const list = document.getElementById('lib-duplicates-list');
+            list.innerHTML = '<p style="color:var(--text-muted)">Loading…</p>';
+            try {
+                const r = await fetch('/api/library/duplicates');
+                if (!r.ok) return;
+                const dups = await r.json();
+                if (!dups.length) { list.innerHTML = '<p style="color:var(--success-text)">✓ No duplicates found.</p>'; return; }
+                list.innerHTML = dups.map(d => `
+                    <div style="margin-bottom:1rem; padding:1rem; background:var(--bg-color); border-radius:0.5rem;">
+                        <div style="font-weight:600; margin-bottom:0.5rem;">📄 ${esc(d.name)} <span style="font-size:0.8rem; color:var(--text-muted);">${d.count} copies · ${d.line_count} lines · ${(d.size/1024).toFixed(1)} KB</span></div>
+                        <ul style="margin:0; padding-left:1.5rem; font-size:0.85rem; color:var(--text-muted);">
+                            ${d.paths.map(p => `<li>${esc(p)}</li>`).join('')}
+                        </ul>
+                    </div>
+                `).join('');
+            } catch(e) { list.innerHTML = '<p style="color:var(--danger-text)">Error loading duplicates.</p>'; }
+        }
+
+        // =====================================================================
+        // Performance Gates & Alerts helpers (Launch Form)
+        // =====================================================================
+
+        function addPerfGate() {
+            const list = document.getElementById('perf-gates-list');
+            const row = document.createElement('div');
+            row.className = 'gate-row';
+            row.style.cssText = 'display:grid; grid-template-columns: 2fr 1fr 1fr auto; gap:0.5rem; margin-bottom:0.5rem; align-items:center;';
+            row.innerHTML = `
+                <input class="gate-metric" type="text" placeholder="metric (e.g. cpu_max)" style="padding:0.3rem;" />
+                <input class="gate-max" type="number" placeholder="max value" style="padding:0.3rem;" />
+                <input class="gate-min" type="number" placeholder="min value" style="padding:0.3rem;" />
+                <button type="button" class="btn btn-sm" style="background:var(--danger-bg);color:var(--danger-text);" onclick="this.closest('.gate-row').remove()">✕</button>
+            `;
+            list.appendChild(row);
+        }
+
+        function addAlert() {
+            const list = document.getElementById('alerts-list');
+            const row = document.createElement('div');
+            row.className = 'alert-row';
+            row.style.cssText = 'display:grid; grid-template-columns: 1fr 2fr 1fr auto; gap:0.5rem; margin-bottom:0.5rem; align-items:center;';
+            row.innerHTML = `
+                <input class="alert-name" type="text" placeholder="alert name" style="padding:0.3rem;" />
+                <input class="alert-condition" type="text" placeholder="condition (e.g. cpu_max > 85)" style="padding:0.3rem;" />
+                <select class="alert-severity" style="padding:0.3rem;">
+                    <option>WARNING</option><option>ERROR</option><option>CRITICAL</option><option>INFO</option>
+                </select>
+                <button type="button" class="btn btn-sm" style="background:var(--danger-bg);color:var(--danger-text);" onclick="this.closest('.alert-row').remove()">✕</button>
+            `;
+            list.appendChild(row);
+        }
+
+        // =====================================================================
+        // Analytics Tab
+        // =====================================================================
+
+        async function fetchAnalyticsStats() {
+            try {
+                const r = await fetch('/api/analytics/history/stats');
+                if (!r.ok) { return; }
+                const d = await r.json();
+                const total = d.total_executions || d.total || '-';
+                document.getElementById('analytics-stat-total').textContent = total;
+                const succRate = d.success_rate != null ? `${(d.success_rate * 100).toFixed(1)}%` : '-';
+                document.getElementById('analytics-stat-success-rate').textContent = succRate;
+                const avgTime = d.avg_execution_time_seconds != null ? `${d.avg_execution_time_seconds.toFixed(2)}s` : '-';
+                document.getElementById('analytics-stat-avg-time').textContent = avgTime;
+            } catch(e) { /* silent */ }
+        }
+
+        async function fetchAnalyticsHistory() {
+            const scriptPath = document.getElementById('analytics-script-path').value.trim();
+            const days = document.getElementById('analytics-days').value || 30;
+            const limit = document.getElementById('analytics-limit').value || 50;
+            const params = new URLSearchParams({ days, limit });
+            if (scriptPath) params.set('script_path', scriptPath);
+            const tbody = document.getElementById('analytics-history-table');
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">Loading…</td></tr>';
+            try {
+                const r = await fetch(`/api/analytics/history?${params}`);
+                if (!r.ok) { tbody.innerHTML = '<tr><td colspan="7" style="color:var(--danger-text)">Error fetching history.</td></tr>'; return; }
+                const data = await r.json();
+                const items = data.items || [];
+                if (!items.length) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);">No history found. Ensure runner.py history_db is populated.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = items.map(item => {
+                    const m = item.metrics || {};
+                    const ok = item.success ? '✅' : '❌';
+                    return `<tr>
+                        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(item.script_path || '')}">${esc((item.script_path||'').split(/[\\/]/).pop())}</td>
+                        <td>${esc((item.start_time||'').slice(0,19))}</td>
+                        <td>${item.execution_time_seconds != null ? parseFloat(item.execution_time_seconds).toFixed(3) : (m.execution_time_seconds != null ? parseFloat(m.execution_time_seconds).toFixed(3) : '-')}</td>
+                        <td>${item.exit_code ?? '-'}</td>
+                        <td>${ok}</td>
+                        <td>${m.cpu_max != null ? parseFloat(m.cpu_max).toFixed(1)+'%' : '-'}</td>
+                        <td>${m.memory_max_mb != null ? parseFloat(m.memory_max_mb).toFixed(1) : '-'}</td>
+                    </tr>`;
+                }).join('');
+            } catch(e) {
+                tbody.innerHTML = `<tr><td colspan="7" style="color:var(--danger-text)">Error: ${esc(String(e))}</td></tr>`;
+            }
+        }
+
+        async function fetchTrend() {
+            const metric = document.getElementById('trend-metric').value;
+            const scriptPath = document.getElementById('trend-script-path').value.trim();
+            const days = document.getElementById('trend-days').value || 30;
+            const params = new URLSearchParams({ metric, days });
+            if (scriptPath) params.set('script_path', scriptPath);
+            const el = document.getElementById('trend-result');
+            el.textContent = 'Analyzing…';
+            try {
+                const r = await fetch(`/api/analytics/trends?${params}`);
+                const data = await r.json();
+                if (!r.ok) { el.textContent = `Error: ${data.detail || JSON.stringify(data)}`; return; }
+                if (data.message) { el.textContent = data.message; return; }
+                const t = data.trend || {};
+                const reg = data.regression || {};
+                el.innerHTML = `
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:1rem;margin-top:0.5rem;">
+                        <div style="background:var(--info-bg);color:var(--info-text);padding:0.75rem;border-radius:0.5rem;">
+                            <div style="font-size:0.75rem;font-weight:600;">Slope (trend)</div>
+                            <div style="font-size:1.25rem;font-weight:700;">${t.slope != null ? t.slope.toFixed(4) : 'N/A'}</div>
+                            <div style="font-size:0.75rem;">${t.trend_direction || ''}</div>
+                        </div>
+                        <div style="background:var(--info-bg);color:var(--info-text);padding:0.75rem;border-radius:0.5rem;">
+                            <div style="font-size:0.75rem;font-weight:600;">R² Fit</div>
+                            <div style="font-size:1.25rem;font-weight:700;">${t.r_squared != null ? t.r_squared.toFixed(4) : 'N/A'}</div>
+                        </div>
+                        <div style="background:${reg.regression_detected ? 'var(--danger-bg)' : 'var(--success-bg)'};color:${reg.regression_detected ? 'var(--danger-text)' : 'var(--success-text)'};padding:0.75rem;border-radius:0.5rem;">
+                            <div style="font-size:0.75rem;font-weight:600;">Regression</div>
+                            <div style="font-size:1.25rem;font-weight:700;">${reg.regression_detected ? '⚠️ Detected' : '✅ None'}</div>
+                            <div style="font-size:0.75rem;">${reg.percent_change != null ? reg.percent_change.toFixed(1)+'% change' : ''}</div>
+                        </div>
+                        <div style="background:var(--card-bg);border:1px solid var(--border-color);padding:0.75rem;border-radius:0.5rem;">
+                            <div style="font-size:0.75rem;font-weight:600;">Data Points</div>
+                            <div style="font-size:1.25rem;font-weight:700;">${data.value_count}</div>
+                            <div style="font-size:0.75rem;">over ${data.days} days</div>
+                        </div>
+                    </div>`;
+            } catch(e) { el.textContent = `Error: ${e}`; }
+        }
+
+        async function fetchAnomalies() {
+            const metric = document.getElementById('anomaly-metric').value;
+            const method = document.getElementById('anomaly-method').value;
+            const days = document.getElementById('anomaly-days').value || 30;
+            const params = new URLSearchParams({ metric, method, days });
+            const el = document.getElementById('anomaly-result');
+            el.textContent = 'Detecting…';
+            try {
+                const r = await fetch(`/api/analytics/anomalies?${params}`);
+                const data = await r.json();
+                if (!r.ok) { el.textContent = `Error: ${data.detail || JSON.stringify(data)}`; return; }
+                if (data.message) { el.textContent = data.message; return; }
+                const anomalies = data.anomalies || [];
+                if (!anomalies.length) {
+                    el.innerHTML = `<div style="color:var(--success-text);font-weight:600;">✅ No anomalies detected in ${data.value_count} data points using ${method} method.</div>`;
+                    return;
+                }
+                el.innerHTML = `
+                    <div style="color:var(--danger-text);font-weight:600;margin-bottom:0.5rem;">⚠️ ${anomalies.length} anomaly/anomalies detected (${method}, ${data.value_count} points):</div>
+                    <pre style="background:var(--danger-bg);color:var(--danger-text);padding:0.75rem;border-radius:0.5rem;font-size:0.8rem;">${esc(JSON.stringify(anomalies, null, 2))}</pre>`;
+            } catch(e) { el.textContent = `Error: ${e}`; }
+        }
+
+        async function exportAnalytics(fmt) {
+            const scriptPath = document.getElementById('analytics-script-path').value.trim();
+            const days = document.getElementById('analytics-days').value || 30;
+            const payload = { format: fmt };
+            if (scriptPath) payload.script_path = scriptPath;
+            try {
+                const r = await fetch('/api/analytics/export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                if (!r.ok) { showToast('Export failed', 'error'); return; }
+                const blob = await r.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `metrics_export.${fmt}`;
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch(e) { showToast(`Export error: ${e}`, 'error'); }
+        }
+
+        async function fetchBenchmarks() {
+            const el = document.getElementById('benchmarks-list');
+            el.textContent = 'Loading…';
+            try {
+                const r = await fetch('/api/analytics/benchmarks');
+                const data = await r.json();
+                if (!r.ok || data.status === 'error') { el.textContent = `Error: ${data.error || data.detail || 'unknown'}`; return; }
+                const benchmarks = data.benchmarks || [];
+                if (!benchmarks.length) { el.textContent = 'No benchmarks found. Create a snapshot first.'; return; }
+                el.innerHTML = benchmarks.map(name => `
+                    <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem;border-bottom:1px solid var(--border-color);">
+                        <span style="font-weight:600;">${esc(name)}</span>
+                        <button class="btn btn-secondary btn-sm" onclick="viewBenchmark('${esc(name)}')">View</button>
+                        <button class="btn btn-secondary btn-sm" onclick="viewBenchmarkRegressions('${esc(name)}')">Regressions</button>
+                    </div>`).join('');
+            } catch(e) { el.textContent = `Error: ${e}`; }
+        }
+
+        async function viewBenchmark(name) {
+            const r = await fetch(`/api/analytics/benchmarks?name=${encodeURIComponent(name)}`);
+            const data = await r.json();
+            document.getElementById('modal-title').textContent = `🏁 Benchmark: ${name}`;
+            document.getElementById('modal-body').textContent = JSON.stringify(data, null, 2);
+            document.getElementById('modal').style.display = 'flex';
+        }
+
+        async function viewBenchmarkRegressions(name) {
+            const r = await fetch(`/api/analytics/benchmarks/${encodeURIComponent(name)}/regressions`);
+            const data = await r.json();
+            document.getElementById('modal-title').textContent = `📉 Regressions: ${name}`;
+            document.getElementById('modal-body').textContent = JSON.stringify(data, null, 2);
+            document.getElementById('modal').style.display = 'flex';
+        }
+
+        function showCreateBenchmarkDialog() {
+            const name = prompt('Benchmark name:');
+            if (!name) return;
+            const version = prompt('Version ID (optional, leave blank for timestamp):', '');
+            const notes = prompt('Notes (optional):', '');
+            fetch('/api/analytics/benchmarks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, version_id: version || null, notes: notes || null }),
+            }).then(r => r.json()).then(d => {
+                if (d.status === 'success') { showToast('Benchmark created', 'success'); fetchBenchmarks(); }
+                else showToast(`Error: ${d.error || 'unknown'}`, 'error');
+            }).catch(e => showToast(`Error: ${e}`, 'error'));
+        }
+
+        // =====================================================================
+        // CI/CD Tab
+        // =====================================================================
+
+        async function loadRunForCICD() {
+            const runId = document.getElementById('cicd-run-id').value.trim();
+            if (!runId) { showToast('Enter a run ID', 'error'); return; }
+            const el = document.getElementById('cicd-run-metrics');
+            el.textContent = 'Loading…';
+            try {
+                const r = await fetch(`/api/runs/${encodeURIComponent(runId)}`);
+                if (!r.ok) { el.textContent = 'Run not found.'; return; }
+                const data = await r.json();
+                const metrics = data.result?.metrics || data.result || {};
+                el.innerHTML = `<pre style="background:var(--info-bg);color:var(--info-text);padding:0.75rem;border-radius:0.5rem;font-size:0.8rem;">${esc(JSON.stringify(metrics, null, 2))}</pre>`;
+                // If gates data present, show results
+                if (data.result?.performance_gates_results) {
+                    renderGateResults(data.result.performance_gates_results, data.result.performance_gates_passed);
+                }
+            } catch(e) { el.textContent = `Error: ${e}`; }
+        }
+
+        function renderGateResults(gateResults, passed) {
+            const el = document.getElementById('cicd-gates-result');
+            if (!gateResults || !gateResults.length) { el.innerHTML = ''; return; }
+            const rows = gateResults.map(g => `
+                <tr>
+                    <td>${esc(g.metric || '')}</td>
+                    <td>${g.value != null ? g.value : '-'}</td>
+                    <td>${g.max_value != null ? g.max_value : '-'}</td>
+                    <td>${g.min_value != null ? g.min_value : '-'}</td>
+                    <td style="font-weight:600;color:${g.passed ? 'var(--success-text)' : 'var(--danger-text)'}">${g.passed ? '✅ PASS' : '❌ FAIL'}</td>
+                </tr>`).join('');
+            el.innerHTML = `
+                <div style="font-weight:700;margin-bottom:0.5rem;color:${passed ? 'var(--success-text)' : 'var(--danger-text)'}">
+                    Performance Gates: ${passed ? '✅ All Passed' : '❌ Some Failed'}
+                </div>
+                <table><thead><tr><th>Metric</th><th>Value</th><th>Max</th><th>Min</th><th>Result</th></tr></thead>
+                <tbody>${rows}</tbody></table>`;
+        }
+
+        async function fetchBaseline() {
+            const scriptPath = document.getElementById('baseline-script-path').value.trim();
+            const metric = document.getElementById('baseline-metric').value.trim();
+            const method = document.getElementById('baseline-method').value;
+            const days = document.getElementById('baseline-days').value || 30;
+            const params = new URLSearchParams({ method, days });
+            if (scriptPath) params.set('script_path', scriptPath);
+            if (metric) params.set('metric', metric);
+            const el = document.getElementById('baseline-result');
+            el.textContent = 'Calculating…';
+            try {
+                const r = await fetch(`/api/analytics/baseline?${params}`);
+                const data = await r.json();
+                if (!r.ok) { el.textContent = `Error: ${data.detail || JSON.stringify(data)}`; return; }
+                el.innerHTML = `<pre style="background:var(--info-bg);color:var(--info-text);padding:0.75rem;border-radius:0.5rem;font-size:0.8rem;">${esc(JSON.stringify(data, null, 2))}</pre>`;
+            } catch(e) { el.textContent = `Error: ${e}`; }
+        }
+
+        async function runRetentionCleanup() {
+            const days = parseInt(document.getElementById('retention-days').value) || 90;
+            if (!confirm(`Delete all history records older than ${days} days from the runner.py history DB?`)) return;
+            const el = document.getElementById('retention-result');
+            el.textContent = 'Running cleanup…';
+            try {
+                const r = await fetch(`/api/analytics/cleanup?days=${days}`, { method: 'DELETE' });
+                const data = await r.json();
+                if (!r.ok) { el.textContent = `Error: ${data.detail || JSON.stringify(data)}`; return; }
+                el.innerHTML = `<span style="color:var(--success-text);font-weight:600;">✅ Cleanup complete: ${JSON.stringify(data)}</span>`;
+            } catch(e) { el.textContent = `Error: ${e}`; }
+        }
+
+        // =====================================================================
+        // Scheduler Tab
+        // =====================================================================
+
+        async function fetchSchedulerTasks() {
+            const tbody = document.getElementById('scheduler-tasks-table');
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);">Loading…</td></tr>';
+            try {
+                const r = await fetch('/api/scheduler/tasks');
+                if (!r.ok) { tbody.innerHTML = '<tr><td colspan="8" style="color:var(--danger-text)">Error loading tasks.</td></tr>'; return; }
+                const data = await r.json();
+                const tasks = data.tasks || [];
+                if (!tasks.length) {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);">No tasks registered.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = tasks.map(t => `<tr>
+                    <td><code>${esc(t.task_id)}</code></td>
+                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(t.script_path)}">${esc((t.script_path||'').split(/[\\/]/).pop())}</td>
+                    <td>${esc(t.cron_expr || t.schedule || '-')}</td>
+                    <td>${t.next_run ? esc(t.next_run.slice(0,16)) : '-'}</td>
+                    <td>${t.last_run ? esc(t.last_run.slice(0,16)) : '-'}</td>
+                    <td><span class="badge ${t.last_status === 'success' ? 'badge-success' : t.last_status ? 'badge-failed' : 'badge-queued'}">${t.last_status || 'pending'}</span></td>
+                    <td>${t.run_count || 0}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="runTaskNow('${esc(t.task_id)}')">▶ Run</button>
+                        <button class="btn btn-sm btn-secondary" onclick="deleteTask('${esc(t.task_id)}')">🗑️</button>
+                    </td>
+                </tr>`).join('');
+            } catch(e) {
+                tbody.innerHTML = `<tr><td colspan="8" style="color:var(--danger-text)">Error: ${esc(String(e))}</td></tr>`;
+            }
+        }
+
+        async function runTaskNow(taskId) {
+            try {
+                const r = await fetch(`/api/scheduler/tasks/${encodeURIComponent(taskId)}/run`, { method: 'POST' });
+                if (!r.ok) { const e = await r.json(); showToast(e.detail || 'Error', 'error'); return; }
+                const data = await r.json();
+                showToast(`Task queued: ${data.run_id}`, 'success');
+            } catch(e) { showToast(`Error: ${e}`, 'error'); }
+        }
+
+        async function deleteTask(taskId) {
+            if (!confirm(`Delete task "${taskId}"?`)) return;
+            try {
+                const r = await fetch(`/api/scheduler/tasks/${encodeURIComponent(taskId)}`, { method: 'DELETE' });
+                if (!r.ok) { const e = await r.json(); showToast(e.detail || 'Error', 'error'); return; }
+                showToast('Task deleted', 'success');
+                fetchSchedulerTasks();
+            } catch(e) { showToast(`Error: ${e}`, 'error'); }
+        }
+
+        async function triggerEvent() {
+            const name = document.getElementById('scheduler-event-name').value.trim();
+            if (!name) { showToast('Enter an event name', 'error'); return; }
+            try {
+                const r = await fetch(`/api/scheduler/events/${encodeURIComponent(name)}`, { method: 'POST' });
+                const data = await r.json();
+                if (!r.ok) { showToast(data.detail || 'Error', 'error'); return; }
+                showToast(`Event "${name}" fired – ${data.triggered_tasks.length} task(s) triggered`, 'success');
+            } catch(e) { showToast(`Error: ${e}`, 'error'); }
+        }
+
+        async function fetchDueTasks() {
+            const el = document.getElementById('due-tasks-result');
+            try {
+                const r = await fetch('/api/scheduler/due');
+                const data = await r.json();
+                if (!data.count) { el.textContent = 'No tasks are due right now.'; return; }
+                el.innerHTML = `<strong>${data.count} task(s) due:</strong> ${data.due_tasks.map(t => esc(t.task_id)).join(', ')}`;
+            } catch(e) { el.textContent = `Error: ${e}`; }
+        }
+
+        function showAddTaskDialog() {
+            document.getElementById('add-task-modal').style.display = 'flex';
+        }
+        function closeAddTaskDialog() {
+            document.getElementById('add-task-modal').style.display = 'none';
+        }
+
+        async function submitAddTask() {
+            const taskId = document.getElementById('task-id-input').value.trim();
+            const scriptPath = document.getElementById('task-script-path-input').value.trim();
+            const schedule = document.getElementById('task-schedule-input').value.trim() || null;
+            const cronExpr = document.getElementById('task-cron-input').value.trim() || null;
+            const argsRaw = document.getElementById('task-args-input').value.trim();
+            const depsRaw = document.getElementById('task-deps-input').value.trim();
+            if (!taskId || !scriptPath) { showToast('Task ID and Script Path are required', 'error'); return; }
+            const scriptArgs = argsRaw ? argsRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
+            const dependencies = depsRaw ? depsRaw.split(',').map(s=>s.trim()).filter(Boolean) : [];
+            try {
+                const r = await fetch('/api/scheduler/tasks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_id: taskId, script_path: scriptPath, schedule, cron_expr: cronExpr, script_args: scriptArgs, dependencies }),
+                });
+                const data = await r.json();
+                if (!r.ok) { showToast(data.detail || 'Error creating task', 'error'); return; }
+                showToast(`Task "${taskId}" registered`, 'success');
+                closeAddTaskDialog();
+                fetchSchedulerTasks();
+            } catch(e) { showToast(`Error: ${e}`, 'error'); }
+        }
+
+        document.getElementById('add-task-modal').addEventListener('click', e => {
+            if (e.target.id === 'add-task-modal') closeAddTaskDialog();
+        });
+
+    </script>
+</body>
+</html>

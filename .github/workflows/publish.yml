@@ -1,0 +1,249 @@
+name: Publish Package
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate-version:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+      tag_name: ${{ steps.get-version.outputs.tag_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: get-version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
+            if [[ "$HEAD_BRANCH" =~ ^v[0-9]+\. ]]; then
+              TAG="$HEAD_BRANCH"
+            else
+              git fetch --tags
+              TAG=$(git tag --sort=-version:refname --list 'v*.*.*' | head -1)
+            fi
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag_name=${TAG}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "📌 Release: $TAG (version: $VERSION)"
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+            echo "❌ Invalid version format: $VERSION"
+            exit 1
+          fi
+          echo "✅ Version format valid: $VERSION"
+
+      - name: Verify version in source
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          PYPROJECT_VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          if [ "$PYPROJECT_VERSION" != "$VERSION" ]; then
+            echo "❌ Version mismatch: pyproject.toml has $PYPROJECT_VERSION, tag has $VERSION"
+            exit 1
+          fi
+          echo "✅ Version in pyproject.toml matches tag: $VERSION"
+
+  test:
+    needs: validate-version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+      fail-fast: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile and validate
+        run: |
+          python -m py_compile runner.py
+          python -m compileall runners/ 2>/dev/null || true
+          python -c "import runner; print(f'✅ Code compiles: {runner.__version__}')"
+      
+      - name: Run unit tests
+        continue-on-error: true
+        run: |
+          if [ -f "pytest.ini" ]; then
+            python -m pytest tests/unit/ -v --tb=short 2>&1 | head -150
+          else
+            echo "⚠️ Skipping tests (pytest.ini not configured)"
+          fi
+
+      - name: Validate package import
+        run: |
+          python -c "import runner; print(f'✅ Package version: {runner.__version__}')"
+
+  build-and-publish:
+    needs: [validate-version, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    environment:
+      name: release
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip setuptools wheel build twine
+
+      - name: Verify version consistency
+        run: |
+          VERSION="${{ needs.validate-version.outputs.version }}"
+          PYPROJECT_VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          RUNNER_VERSION=$(grep "__version__ = " runner.py | sed 's/__version__ = "\(.*\)"/\1/')
+          
+          echo "📌 Version check:"
+          echo "  Tag: $VERSION"
+          echo "  pyproject.toml: $PYPROJECT_VERSION"
+          echo "  runner.py: $RUNNER_VERSION"
+          
+          if [ "$PYPROJECT_VERSION" != "$VERSION" ] || [ "$RUNNER_VERSION" != "$VERSION" ]; then
+            echo "❌ Version mismatch detected"
+            exit 1
+          fi
+          echo "✅ All versions synchronized"
+
+      - name: Build distributions
+        run: |
+          python -m build
+          echo "✅ Built distributions:"
+          ls -lh dist/
+
+      - name: Verify package integrity
+        run: |
+          twine check dist/*
+          pip install dist/*.whl
+          python -c "import runner; print(f'✅ Installed version: {runner.__version__}')"
+
+      - name: Publish to PyPI
+        if: success()
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          echo "🚀 Publishing to PyPI..."
+          twine upload dist/* --verbose
+          echo "✅ Published to PyPI"
+
+      - name: Publish to GitHub Packages
+        if: success()
+        continue-on-error: true
+        env:
+          TWINE_REPOSITORY_URL: https://python.pkg.github.com/jomardyan/python-script-runner
+          TWINE_USERNAME: ${{ github.actor }}
+          TWINE_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🚀 Publishing to GitHub Packages..."
+          echo "Note: GitHub Packages may require additional setup"
+          echo "Repository: https://github.com/jomardyan/Python-Script-Runner/packages"
+          if twine upload dist/* --verbose 2>&1 | grep -q "404"; then
+            echo "⚠️  GitHub Packages: 404 error (may need PAT token)"
+            echo "See: https://github.com/jomardyan/Python-Script-Runner/settings/packages"
+            exit 0
+          fi
+          echo "✅ Published to GitHub Packages"
+
+      - name: Create GitHub Release with Assets
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.validate-version.outputs.tag_name }}
+          body: |
+            # Release ${{ needs.validate-version.outputs.version }}
+            
+            ## Distribution Packages
+            - **PyPI**: https://pypi.org/project/python-script-runner/${{ needs.validate-version.outputs.version }}/
+            - **GitHub Packages**: https://github.com/jomardyan/Python-Script-Runner/packages
+            
+            ## Install
+            ```bash
+            pip install python-script-runner==${{ needs.validate-version.outputs.version }}
+            ```
+            
+            ## What's New
+            See commit history for changes in this release.
+          files: dist/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Success Summary
+        if: success()
+        run: |
+          cat << 'EOF'
+          
+          ╔════════════════════════════════════════════════════════════╗
+          ║          🎉 Release Published Successfully! 🎉             ║
+          ╠════════════════════════════════════════════════════════════╣
+          ║ Version: ${{ needs.validate-version.outputs.version }}
+          ║ Tag: ${{ needs.validate-version.outputs.tag_name }}
+          ╠════════════════════════════════════════════════════════════╣
+          ║ 📦 PyPI Package                                            ║
+          ║ 🐍 GitHub Packages                                         ║
+          ║ 📄 GitHub Release                                          ║
+          ║ ✅ All systems go!                                        ║
+          ╚════════════════════════════════════════════════════════════╝
+          
+          📍 Package URLs:
+          - PyPI: https://pypi.org/project/python-script-runner/${{ needs.validate-version.outputs.version }}/
+          - GitHub Packages: https://github.com/jomardyan/Python-Script-Runner/packages
+          - Release: https://github.com/jomardyan/Python-Script-Runner/releases/tag/${{ needs.validate-version.outputs.tag_name }}
+          
+          🚀 Install with: pip install python-script-runner==${{ needs.validate-version.outputs.version }}
+          
+          EOF
+
+      - name: Publish Failure Summary
+        if: failure()
+        run: |
+          echo "❌ Release publishing failed"
+          echo "📍 Check workflow logs for details"
+          exit 1

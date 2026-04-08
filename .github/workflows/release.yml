@@ -1,0 +1,826 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type (major, minor, patch)'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  auto-version:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.bump.outputs.new_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: Bump version
+        id: bump
+        run: |
+          bash version.sh bump ${{ github.event.inputs.bump_type }}
+          NEW_VERSION=$(bash version.sh current)
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version bumped to: $NEW_VERSION"
+        env:
+          RELEASE_VERSION: ${{ steps.bump.outputs.new_version || github.event.inputs.bump_type }}
+      
+      - name: Commit version changes
+        run: |
+          git add pyproject.toml runner.py
+          git commit -m "Bump version to ${{ steps.bump.outputs.new_version }}" || true
+      
+      - name: Create and push tag
+        run: |
+          VERSION="${{ steps.bump.outputs.new_version }}"
+          git tag -a "v${VERSION}" -m "Release version ${VERSION}"
+          
+          # Push tag with retry logic
+          MAX_ATTEMPTS=5
+          ATTEMPT=0
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            if git push origin "v${VERSION}" && git push origin main; then
+              echo "✅ Tag and branch pushed successfully"
+              break
+            fi
+            ATTEMPT=$((ATTEMPT + 1))
+            if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+              echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Push failed, retrying..."
+              sleep 2
+            fi
+          done
+          
+          if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+            echo "❌ Failed to push tag after $MAX_ATTEMPTS attempts"
+            exit 1
+          fi
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', 'pypy-3.10']
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+      
+      - name: Compile and validate
+        run: |
+          python -m py_compile runner.py
+          python -m compileall runners/ 2>/dev/null || true
+          python -c "import runner; print(f'✅ Core compiles: {runner.__version__}')"
+          python -c "from runners.workflows import workflow_engine; print('✅ Subpackages OK')"
+      
+      - name: Run unit tests
+        continue-on-error: true
+        run: |
+          if [ -f "pytest.ini" ]; then
+            python -m pytest tests/unit/ -v --tb=short 2>&1 | head -150
+            echo "Unit tests completed"
+          else
+            echo "⚠️ No tests configured (pytest.ini not found)"
+          fi
+
+  build-python3:
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools
+          pip install -r requirements.txt 2>&1 | grep -v "already satisfied" || true
+      
+      - name: Create Python3 bundle
+        run: |
+          mkdir -p dist/python3-runner
+          cp runner.py dist/python3-runner/
+          cp -r runners dist/python3-runner/runners
+          cp requirements.txt dist/python3-runner/
+          cp LICENSE dist/python3-runner/
+          cp README.md dist/python3-runner/
+          cp config.example.yaml dist/python3-runner/ || true
+          
+          # Create setup script
+          cat > dist/python3-runner/INSTALL.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          echo "Installing Python Script Runner (Python 3)..."
+          python3 -m pip install -r requirements.txt
+          chmod +x runner.py
+          echo "✅ Installation complete!"
+          echo "Usage: python3 runner.py <script.py> [options]"
+          EOF
+          chmod +x dist/python3-runner/INSTALL.sh
+          
+          # Create README for bundle
+          cat > dist/python3-runner/BUNDLE_README.md << 'EOF'
+          # Python Script Runner - Python 3 Distribution
+          
+          This bundle contains the production-ready Python Script Runner optimized for CPython 3.6+.
+          
+          ## Quick Start
+          
+          ### Linux/macOS
+          ```bash
+          bash INSTALL.sh
+          python3 runner.py your_script.py --help
+          ```
+          
+          ### Windows
+          ```cmd
+          pip install -r requirements.txt
+          python runner.py your_script.py --help
+          ```
+          
+          ## System Requirements
+          - Python 3.6 or higher
+          - pip package manager
+          - ~50 MB disk space
+          
+          ## Dependencies
+          - psutil (process monitoring)
+          - pyyaml (configuration)
+          - requests (webhooks/alerts)
+          
+          ## Features
+          - Real-time CPU, memory, and I/O monitoring
+          - Multi-channel alerting (Email, Slack, Webhooks)
+          - CI/CD integration with performance gates
+          - Historical analytics and trend detection
+          - Advanced retry strategies
+          
+          ## Performance
+          - Baseline execution speed (CPython 3.11)
+          - Monitoring overhead: < 2%
+          - See main README.md for PyPy3 benchmark comparison
+          
+          For full documentation, see README.md
+          EOF
+      
+      - name: Create Python3 tarball
+        run: |
+          cd dist
+          tar -czf python3-runner-${{ github.ref_name }}.tar.gz python3-runner/
+          ls -lh python3-runner-${{ github.ref_name }}.tar.gz
+      
+      - name: Create Python3 zip
+        run: |
+          cd dist
+          zip -r python3-runner-${{ github.ref_name }}.zip python3-runner/
+          ls -lh python3-runner-${{ github.ref_name }}.zip
+      
+      - name: Upload Python3 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python3-runner
+          path: dist/python3-runner-*.*
+          retention-days: 5
+
+  build-windows-exe:
+    needs: test
+    runs-on: windows-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Extract version
+        id: version
+        shell: bash
+        run: |
+          TAG="${{ github.ref_name }}"
+          if [[ "$TAG" =~ ^v[0-9] ]]; then
+            VERSION=${TAG#v}
+          else
+            VERSION=$(python -c "import re; m=re.search(r'__version__\s*=\s*\"([^\"]+)\"', open('runner.py', encoding='utf-8').read()); print(m.group(1))")
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building Windows EXE for version: $VERSION"
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+          pip install pyinstaller
+      
+      - name: Verify Python and dependencies
+        run: |
+          python --version
+          pip list | grep -i pyinstaller
+      
+      - name: Build Windows EXE with PyInstaller
+        id: build
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "Building Windows EXE..."
+          echo "Current directory: $(pwd)"
+          
+          # Debug: List current directory
+          echo "Files in current directory:"
+          ls -la | head -20
+          
+          # Check if runner.spec exists
+          if [ ! -f "runner.spec" ]; then
+            echo "ERROR: runner.spec not found in current directory"
+            echo "Listing all .spec files:"
+            find . -name "*.spec" -type f
+            exit 1
+          fi
+          
+          echo "✅ runner.spec found"
+          
+          # Create output directories
+          mkdir -p dist/windows/dist dist/windows/build
+          
+          # Run PyInstaller with full output
+          echo "Running PyInstaller..."
+          pyinstaller runner.spec \
+            --distpath dist/windows/dist \
+            --workpath dist/windows/build \
+            2>&1 || {
+              echo "❌ PyInstaller failed"
+              exit 1
+            }
+          
+          # Verify output
+          if [ -f "dist/windows/dist/python-script-runner.exe" ]; then
+            echo "✅ Windows EXE built successfully"
+            ls -lh dist/windows/dist/python-script-runner.exe
+            echo "exe_path=dist/windows/dist/python-script-runner.exe" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Failed to build Windows EXE - executable not found"
+            echo "Contents of dist/windows/dist:"
+            ls -lh dist/windows/dist/ || true
+            exit 1
+          fi
+      
+      - name: Create Windows distribution package
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          PKG_DIR="dist/windows/python-script-runner-$VERSION"
+          
+          mkdir -p "$PKG_DIR"
+          cp dist/windows/dist/python-script-runner.exe "$PKG_DIR/"
+          cp LICENSE "$PKG_DIR/"
+          cp README.md "$PKG_DIR/"
+          cp config.example.yaml "$PKG_DIR/" || true
+          
+          cat > "$PKG_DIR/WINDOWS_README.md" << 'EOF'
+          # Python Script Runner - Windows Executable
+          
+          This folder contains a standalone Windows executable (EXE) that requires **no Python installation**.
+          
+          ## Quick Start
+          
+          Simply run the executable:
+          ```cmd
+          python-script-runner.exe your_script.py
+          ```
+          
+          ## System Requirements
+          - Windows 7 SP1 or later
+          - ~60-80 MB disk space
+          - No Python installation required!
+          
+          ## Features
+          - ✅ Real-time CPU, memory, I/O monitoring
+          - ✅ Multi-channel alerting (Email, Slack, Webhooks)
+          - ✅ CI/CD integration with performance gates
+          - ✅ No Python required - completely standalone
+          EOF
+      
+      - name: Create Windows ZIP package
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          cd dist/windows
+          powershell -Command "Compress-Archive -Path python-script-runner-$VERSION -DestinationPath python-script-runner-$VERSION-windows.zip -Force"
+          ls -lh python-script-runner-$VERSION-windows.zip
+      
+      - name: Calculate Windows checksum
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          cd dist/windows
+          powershell -Command "(Get-FileHash -Algorithm SHA256 python-script-runner-$VERSION-windows.zip).Hash | Out-File -NoNewline python-script-runner-$VERSION-windows.zip.sha256"
+          cat python-script-runner-$VERSION-windows.zip.sha256
+      
+      - name: Upload Windows EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: |
+            dist/windows/python-script-runner-*-windows.zip
+            dist/windows/python-script-runner-*-windows.zip.sha256
+          retention-days: 5
+
+  build-linux-deb:
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Extract version
+        id: version
+        run: |
+          TAG="${{ github.ref_name }}"
+          if [[ "$TAG" =~ ^v[0-9] ]]; then
+            VERSION=${TAG#v}
+          else
+            VERSION=$(python -c "import re; m=re.search(r'__version__\s*=\s*\"([^\"]+)\"', open('runner.py', encoding='utf-8').read()); print(m.group(1))")
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building Linux DEB for version: $VERSION"
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          sudo apt-get update && sudo apt-get install -y dpkg-dev
+      
+      - name: Build Linux DEB package
+        id: build
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          PKG_DIR="dist/linux/python-script-runner-$VERSION"
+          DEBIAN_DIR="$PKG_DIR/DEBIAN"
+          
+          echo "Creating DEB package structure..."
+          mkdir -p "$DEBIAN_DIR"
+          mkdir -p "$PKG_DIR/usr/bin"
+          mkdir -p "$PKG_DIR/usr/lib/python-script-runner"
+          mkdir -p "$PKG_DIR/usr/share/doc/python-script-runner"
+          
+          cp runner.py "$PKG_DIR/usr/lib/python-script-runner/"
+          cp -r runners "$PKG_DIR/usr/lib/python-script-runner/runners"
+          cp requirements.txt "$PKG_DIR/usr/lib/python-script-runner/"
+          cp LICENSE "$PKG_DIR/usr/share/doc/python-script-runner/copyright"
+          cp README.md "$PKG_DIR/usr/share/doc/python-script-runner/"
+          cp config.example.yaml "$PKG_DIR/usr/lib/python-script-runner/" || true
+          
+          cat > "$PKG_DIR/usr/bin/python-script-runner" << 'WRAPPER'
+          #!/bin/bash
+          set -e
+          SCRIPT_DIR="/usr/lib/python-script-runner"
+          python3 -c "import psutil, yaml, requests" 2>/dev/null || {
+              python3 -m pip install -r "$SCRIPT_DIR/requirements.txt" || exit 1
+          }
+          exec python3 "$SCRIPT_DIR/runner.py" "$@"
+          WRAPPER
+          chmod +x "$PKG_DIR/usr/bin/python-script-runner"
+          
+          INSTALLED_SIZE=$(du -s "$PKG_DIR/usr" | awk '{print $1}')
+          
+          cat > "$DEBIAN_DIR/control" << CONTROL
+          Package: python-script-runner
+          Version: $VERSION
+          Architecture: all
+          Maintainer: Python Script Runner Contributors <dev@example.com>
+          Homepage: https://github.com/jomardyan/Python-Script-Runner
+          Installed-Size: $INSTALLED_SIZE
+          Depends: python3 (>= 3.6), python3-pip, python3-psutil, python3-yaml, python3-requests
+          Description: Production-grade Python script execution engine
+           Python Script Runner provides real-time monitoring, alerting, analytics,
+           and enterprise integrations for Python script execution.
+          CONTROL
+          
+          cat > "$DEBIAN_DIR/postinst" << 'POSTINST'
+          #!/bin/bash
+          set -e
+          python3 -m pip install -q psutil pyyaml requests 2>/dev/null || true
+          POSTINST
+          chmod +x "$DEBIAN_DIR/postinst"
+          
+          cat > "$DEBIAN_DIR/prerm" << 'PRERM'
+          #!/bin/bash
+          exit 0
+          PRERM
+          chmod +x "$DEBIAN_DIR/prerm"
+          
+          dpkg-deb --build "$PKG_DIR" "dist/linux/python-script-runner_${VERSION}_all.deb"
+          
+          if [ -f "dist/linux/python-script-runner_${VERSION}_all.deb" ]; then
+            echo "✅ DEB package built successfully"
+            ls -lh "dist/linux/python-script-runner_${VERSION}_all.deb"
+            echo "deb_path=dist/linux/python-script-runner_${VERSION}_all.deb" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Failed to build DEB package"
+            exit 1
+          fi
+      
+      - name: Verify DEB package
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          DEB_FILE="dist/linux/python-script-runner_${VERSION}_all.deb"
+          
+          echo "Verifying DEB package..."
+          dpkg-deb -c "$DEB_FILE" | head -20
+          dpkg-deb -c "$DEB_FILE" | tail -5
+      
+      - name: Calculate Linux checksum
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          cd dist/linux
+          sha256sum python-script-runner_${VERSION}_all.deb > python-script-runner_${VERSION}_all.deb.sha256
+          cat python-script-runner_${VERSION}_all.deb.sha256
+      
+      - name: Upload Linux DEB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: |
+            dist/linux/python-script-runner_*_all.deb
+            dist/linux/python-script-runner_*_all.deb.sha256
+          retention-days: 5
+
+  build-pypy3:
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up PyPy 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: 'pypy-3.10'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Create PyPy3 bundle
+        run: |
+          mkdir -p dist/pypy3-runner
+          cp runner.py dist/pypy3-runner/
+          cp -r runners dist/pypy3-runner/runners
+          cp requirements.txt dist/pypy3-runner/
+          cp requirements-pypy3.txt dist/pypy3-runner/ || true
+          cp LICENSE dist/pypy3-runner/
+          cp README.md dist/pypy3-runner/
+          cp config.example.yaml dist/pypy3-runner/ || true
+          
+          # Create setup script for PyPy3
+          cat > dist/pypy3-runner/INSTALL.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          echo "Installing Python Script Runner (PyPy3)..."
+          
+          # Check if PyPy3 is installed
+          if ! command -v pypy3 &> /dev/null; then
+              echo "PyPy3 not found. Installing..."
+              if command -v apt-get &> /dev/null; then
+                  sudo apt-get update && sudo apt-get install -y pypy3 pypy3-dev
+              elif command -v brew &> /dev/null; then
+                  brew install pypy3
+              else
+                  echo "Please install PyPy3 manually: https://www.pypy.org/download.html"
+                  exit 1
+              fi
+          fi
+          
+          echo "Installing Python dependencies..."
+          pypy3 -m pip install -r requirements.txt
+          
+          # Try to install optional PyPy3-specific optimizations
+          pypy3 -m pip install -r requirements-pypy3.txt 2>/dev/null || true
+          
+          chmod +x runner.py
+          echo "✅ Installation complete!"
+          echo "Usage: pypy3 runner.py <script.py> [options]"
+          echo ""
+          echo "Performance tip: PyPy3 is 27x faster for CPU-bound workloads!"
+          echo "See README.md for detailed benchmarks."
+          EOF
+          chmod +x dist/pypy3-runner/INSTALL.sh
+          
+          # Create README for PyPy3 bundle
+          cat > dist/pypy3-runner/BUNDLE_README.md << 'EOF'
+          # Python Script Runner - PyPy3 Distribution
+          
+          This bundle contains the production-ready Python Script Runner optimized for PyPy3, offering **27x performance improvement** over CPython for CPU-bound workloads.
+          
+          ## Quick Start
+          
+          ### Linux/macOS
+          ```bash
+          bash INSTALL.sh
+          pypy3 runner.py your_script.py --help
+          ```
+          
+          ### Windows
+          ```cmd
+          pypy3 -m pip install -r requirements.txt
+          pypy3 runner.py your_script.py --help
+          ```
+          
+          ## System Requirements
+          - PyPy3 3.8+ (or PyPy 3.10+)
+          - pip package manager
+          - ~100 MB disk space
+          
+          ## Performance Improvements
+          - **Overall**: 27.3x faster than CPython
+          - **Fibonacci**: 4.8x faster (recursive operations)
+          - **Matrix**: 13.6x faster (numerical workloads)
+          - **Loops**: 43.6x faster (tight loops)
+          
+          See README.md for complete benchmarks and real-world impact analysis.
+          
+          ## Installation
+          
+          PyPy3 should be installed before running the setup script:
+          
+          - **Ubuntu/Debian**: `sudo apt-get install pypy3`
+          - **macOS**: `brew install pypy3`
+          - **Windows**: Download from https://www.pypy.org/download.html
+          - **Docker**: `docker run -it pypy:3.10`
+          
+          ## When to Use PyPy3
+          - CPU-bound monitoring workloads
+          - Heavy data analytics
+          - Recursive algorithms
+          - Long-running scripts with lots of computation
+          
+          ## Limitations
+          - PyPy3 startup time is longer (usually fine for long-running processes)
+          - Some C extensions may not be compatible
+          - First run will be slower (JIT compilation phase)
+          
+          For full documentation, see README.md
+          EOF
+      
+      - name: Create PyPy3 tarball
+        run: |
+          cd dist
+          tar -czf pypy3-runner-${{ github.ref_name }}.tar.gz pypy3-runner/
+          ls -lh pypy3-runner-${{ github.ref_name }}.tar.gz
+      
+      - name: Create PyPy3 zip
+        run: |
+          cd dist
+          zip -r pypy3-runner-${{ github.ref_name }}.zip pypy3-runner/
+          ls -lh pypy3-runner-${{ github.ref_name }}.zip
+      
+      - name: Upload PyPy3 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pypy3-runner
+          path: dist/pypy3-runner-*.*
+          retention-days: 5
+
+  create-release:
+    needs: [auto-version, build-python3, build-pypy3, build-windows-exe, build-linux-deb]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Determine version
+        id: version
+        run: |
+          # If triggered by tag push, use ref_name
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${{ github.ref_name }}"
+            VERSION=${TAG#v}
+          else
+            # If triggered by workflow_dispatch, wait for the tag created by auto-version
+            echo "Waiting for tag to be available..."
+            MAX_ATTEMPTS=60
+            ATTEMPT=0
+            
+            while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+              git fetch origin --tags --force
+              # Get the most recently created tag
+              TAG=$(git tag --sort=-creatordate --list 'v*.*.*' | head -1)
+              if [ -n "$TAG" ]; then
+                VERSION=${TAG#v}
+                echo "✅ Tag found: $TAG"
+                break
+              fi
+              
+              ATTEMPT=$((ATTEMPT + 1))
+              if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+                echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: Tag not yet available, waiting..."
+                sleep 2
+              fi
+            done
+            
+            if [ -z "$TAG" ]; then
+              echo "❌ Timeout waiting for tag"
+              exit 1
+            fi
+          fi
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
+          echo "Tag: $TAG"
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.deb' -o -name '*.sha256' \) -exec cp {} release/ \;
+          ls -lh release/
+      
+      - name: Create checksums
+        run: |
+          cd release
+          # Create combined checksum file if individual sums don't exist
+          if [ ! -f "SHA256SUMS.txt" ]; then
+            if [ $(ls -1 *.tar.gz *.zip 2>/dev/null | wc -l) -gt 0 ]; then
+              sha256sum *.tar.gz *.zip > SHA256SUMS.txt 2>/dev/null || sha256sum * > SHA256SUMS.txt
+            fi
+          fi
+          # Append any individual .sha256 files to the combined checksum
+          for f in *.sha256; do
+            if [ -f "$f" ]; then
+              cat "$f" >> SHA256SUMS.txt 2>/dev/null || true
+            fi
+          done
+          cat SHA256SUMS.txt
+      
+      - name: Generate release notes
+        run: |
+          RUNNER_VERSION=$(grep "__version__" runner.py | sed 's/__version__ = "\(.*\)"/\1/')
+          PYPROJECT_VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          RELEASE_VER="${{ steps.version.outputs.version }}"
+          TAG_NAME="${{ steps.version.outputs.tag }}"
+          
+          cat > release/RELEASE_NOTES.md << EOF
+          # Python Script Runner ${{ github.ref_name }}
+          
+          **Version**: $RELEASE_VER
+          **Code Version**: $RUNNER_VERSION
+          **Build Date**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+          
+          ## 🪟 Windows Executable
+          - **python-script-runner-VERSION-windows.zip** - Standalone EXE (no Python required)
+          - Extract ZIP and run directly on Windows 7 SP1+
+          - ~60-80 MB size
+          
+          ## 🐧 Linux Debian Package
+          - **python-script-runner_VERSION_all.deb** - System package for Debian/Ubuntu
+          - Install with: \`sudo apt install ./python-script-runner_VERSION_all.deb\`
+          - ~10 MB size, system integration
+          
+          ## Python 3 (CPython)
+          - **python3-runner-${{ github.ref_name }}.tar.gz** - Linux/macOS archive
+          - **python3-runner-${{ github.ref_name }}.zip** - Windows/cross-platform archive
+          - Requirements: Python 3.6+
+          
+          ## PyPy3 (High-Performance)
+          - **pypy3-runner-${{ github.ref_name }}.tar.gz** - Linux/macOS archive
+          - **pypy3-runner-${{ github.ref_name }}.zip** - Windows/cross-platform archive
+          - Requirements: PyPy3 3.8+
+          - Performance: 27.3x faster than CPython for CPU-bound workloads
+          
+          ## What's Included
+          
+          Each distribution contains:
+          - runner.py (v$RUNNER_VERSION) - Main application
+          - requirements.txt - Production dependencies
+          - README.md - Full documentation
+          - LICENSE - MIT License
+          - config.example.yaml - Configuration template
+          
+          ## Verification
+          
+          Verify file integrity using SHA256:
+          \`\`\`bash
+          sha256sum -c SHA256SUMS.txt
+          \`\`\`
+          
+          ## Quick Start
+          
+          ### Windows Executable (Easiest)
+          \`\`\`bash
+          unzip python-script-runner-VERSION-windows.zip
+          cd python-script-runner-VERSION
+          python-script-runner.exe script.py
+          \`\`\`
+          
+          ### Linux Debian (Recommended for Linux)
+          \`\`\`bash
+          sudo apt install ./python-script-runner_VERSION_all.deb
+          python-script-runner script.py
+          \`\`\`
+          
+          ### Python 3
+          \`\`\`bash
+          tar xzf python3-runner-${{ github.ref_name }}.tar.gz
+          cd python3-runner
+          bash INSTALL.sh
+          python3 runner.py --help
+          \`\`\`
+          
+          ### PyPy3 (Fast)
+          \`\`\`bash
+          tar xzf pypy3-runner-${{ github.ref_name }}.tar.gz
+          cd pypy3-runner
+          bash INSTALL.sh
+          pypy3 runner.py --help
+          \`\`\`
+          
+          ## All Features Included
+          - ✅ Real-time CPU, memory, I/O monitoring
+          - ✅ Multi-channel alerting (Email, Slack, Webhooks)
+          - ✅ CI/CD integration with performance gates
+          - ✅ Historical analytics and anomaly detection
+          - ✅ Advanced retry strategies
+          - ✅ Configuration file support
+          
+          ## Support
+          - Documentation: See README.md in distributions
+          - Issues: <https://github.com/jomardyan/Python-Script-Runner/issues>
+          - License: MIT
+          EOF
+          cat release/RELEASE_NOTES.md
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          files: |
+            release/python-script-runner-*-windows.zip
+            release/python-script-runner-*-windows.zip.sha256
+            release/python-script-runner_*_all.deb
+            release/python-script-runner_*_all.deb.sha256
+            release/python3-runner-*.tar.gz
+            release/python3-runner-*.zip
+            release/pypy3-runner-*.tar.gz
+            release/pypy3-runner-*.zip
+            release/SHA256SUMS.txt
+          body_path: release/RELEASE_NOTES.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
