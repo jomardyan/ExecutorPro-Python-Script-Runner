@@ -4987,19 +4987,21 @@ class ResourceForecaster:
         try:
             # Get historical data
             conn = sqlite3.connect(self.db_path)
-            c = conn.cursor()
-            
-            cutoff = datetime.now() - timedelta(days=90)
-            c.execute("""
-                SELECT e.start_time, metric_value FROM metrics m
-                    JOIN executions e ON m.execution_id = e.id
-                WHERE metric_name = ? AND e.start_time > ?
-                ORDER BY e.start_time
-            """, (metric_name, cutoff.isoformat()))
-            
-            data = c.fetchall()
-            conn.close()
-            
+            try:
+                c = conn.cursor()
+
+                cutoff = datetime.now() - timedelta(days=90)
+                c.execute("""
+                    SELECT e.start_time, metric_value FROM metrics m
+                        JOIN executions e ON m.execution_id = e.id
+                    WHERE metric_name = ? AND e.start_time > ?
+                    ORDER BY e.start_time
+                """, (metric_name, cutoff.isoformat()))
+
+                data = c.fetchall()
+            finally:
+                conn.close()
+
             if len(data) < 10:
                 return {"status": "insufficient_data", "min_required": 10, "available": len(data)}
             
